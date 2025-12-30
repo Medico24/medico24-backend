@@ -7,13 +7,24 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.redis_client import get_redis_client
+from app.core.redis_client import CacheManager, get_redis_client
 from app.core.security import decode_access_token
 from app.database import get_db
 from app.services.user_service import UserService
 
 # Security
 security = HTTPBearer()
+
+
+def get_cache_manager() -> CacheManager:
+    """
+    Get CacheManager instance.
+
+    Returns:
+        CacheManager instance
+    """
+    redis_client = get_redis_client()
+    return CacheManager(redis_client)
 
 
 async def get_current_user_id(
@@ -62,6 +73,7 @@ async def get_current_user_id(
 async def get_current_user(
     user_id: Annotated[UUID, Depends(get_current_user_id)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    cache_manager: Annotated[CacheManager, Depends(get_cache_manager)],
 ) -> dict:
     """
     Get current user from database.
@@ -69,6 +81,7 @@ async def get_current_user(
     Args:
         user_id: User ID from JWT token
         db: Database session
+        cache_manager: Cache manager for user data
 
     Returns:
         User data from database
@@ -76,7 +89,8 @@ async def get_current_user(
     Raises:
         HTTPException: If user not found or inactive
     """
-    user = await UserService.get_user_by_id(db, user_id)
+    user_service = UserService(cache_manager)
+    user = await user_service.get_user_by_id(db, user_id)
 
     if not user:
         raise HTTPException(
@@ -98,4 +112,5 @@ async def get_current_user(
 DatabaseSession = Annotated[AsyncSession, Depends(get_db)]
 CurrentUserId = Annotated[UUID, Depends(get_current_user_id)]
 CurrentUser = Annotated[dict, Depends(get_current_user)]
+CacheManagerDep = Annotated[CacheManager, Depends(get_cache_manager)]
 RedisClient = Annotated[any, Depends(get_redis_client)]
