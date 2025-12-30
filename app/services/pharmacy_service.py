@@ -353,26 +353,62 @@ class PharmacyService:
         return result.rowcount > 0  # type: ignore[attr-defined]
 
     @staticmethod
+    def _build_location_update_values(
+        location_data: PharmacyLocationUpdate,
+    ) -> dict:
+        """Build update values from location data, excluding None values."""
+        fields = [
+            "address_line",
+            "city",
+            "state",
+            "country",
+            "pincode",
+            "latitude",
+            "longitude",
+        ]
+        return {
+            field: getattr(location_data, field)
+            for field in fields
+            if getattr(location_data, field) is not None
+        }
+
+    @staticmethod
+    async def _update_geo_column(
+        db: AsyncSession, pharmacy_id: UUID, location_data: PharmacyLocationUpdate
+    ) -> None:
+        """Update geo column if latitude or longitude changed."""
+        if location_data.latitude is None and location_data.longitude is None:
+            return
+
+        # Get current location to get coordinates
+        location_select = select(pharmacy_locations).where(
+            pharmacy_locations.c.pharmacy_id == pharmacy_id
+        )
+        loc_result = await db.execute(location_select)
+        location = loc_result.mappings().first()
+
+        if location:
+            await db.execute(
+                text(
+                    """
+                    UPDATE pharmacy_locations
+                    SET geo = ST_MakePoint(:longitude, :latitude)
+                    WHERE pharmacy_id = :pharmacy_id
+                    """
+                ),
+                {
+                    "longitude": location["longitude"],
+                    "latitude": location["latitude"],
+                    "pharmacy_id": pharmacy_id,
+                },
+            )
+
+    @staticmethod
     async def update_pharmacy_location(
         db: AsyncSession, pharmacy_id: UUID, location_data: PharmacyLocationUpdate
     ) -> dict | None:
         """Update pharmacy location."""
-        # Build update values
-        update_values = {}
-        if location_data.address_line is not None:
-            update_values["address_line"] = location_data.address_line
-        if location_data.city is not None:
-            update_values["city"] = location_data.city
-        if location_data.state is not None:
-            update_values["state"] = location_data.state
-        if location_data.country is not None:
-            update_values["country"] = location_data.country
-        if location_data.pincode is not None:
-            update_values["pincode"] = location_data.pincode
-        if location_data.latitude is not None:
-            update_values["latitude"] = location_data.latitude
-        if location_data.longitude is not None:
-            update_values["longitude"] = location_data.longitude
+        update_values = PharmacyService._build_location_update_values(location_data)
 
         if not update_values:
             return await PharmacyService.get_pharmacy_by_id(db, pharmacy_id)
@@ -384,33 +420,8 @@ class PharmacyService:
             .returning(pharmacy_locations)
         )
 
-        result = await db.execute(query)
-
-        # Update geo column if lat/long changed
-        if location_data.latitude is not None or location_data.longitude is not None:
-            # Get current location to get coordinates
-            location_select = select(pharmacy_locations).where(
-                pharmacy_locations.c.pharmacy_id == pharmacy_id
-            )
-            loc_result = await db.execute(location_select)
-            location = loc_result.mappings().first()
-
-            if location:
-                await db.execute(
-                    text(
-                        """
-                        UPDATE pharmacy_locations
-                        SET geo = ST_MakePoint(:longitude, :latitude)
-                        WHERE pharmacy_id = :pharmacy_id
-                        """
-                    ),
-                    {
-                        "longitude": location["longitude"],
-                        "latitude": location["latitude"],
-                        "pharmacy_id": pharmacy_id,
-                    },
-                )
-
+        await db.execute(query)
+        await PharmacyService._update_geo_column(db, pharmacy_id, location_data)
         await db.commit()
 
         return await PharmacyService.get_pharmacy_by_id(db, pharmacy_id)

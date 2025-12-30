@@ -8,9 +8,9 @@ from pathlib import Path
 
 def run_command(cmd: list[str], description: str) -> bool:
     """Run a command and return success status."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"⚙️  {description}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     try:
         subprocess.run(cmd, check=True)
         print(f"✅ {description} - SUCCESS")

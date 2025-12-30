@@ -346,7 +346,7 @@ async def test_search_pharmacies_nearby(
 
     # Search near Mumbai center
     response = await client.get(
-        "/api/v1/pharmacies/search/nearby" "?latitude=19.0760&longitude=72.8777&radius_km=10"
+        "/api/v1/pharmacies/search/nearby?latitude=19.0760&longitude=72.8777&radius_km=10"
     )
     assert response.status_code == 200
     data = response.json()
@@ -392,7 +392,7 @@ async def test_search_pharmacies_nearby_small_radius(
 
     # Search far away with small radius
     response = await client.get(
-        "/api/v1/pharmacies/search/nearby" "?latitude=28.7041&longitude=77.1025&radius_km=1"
+        "/api/v1/pharmacies/search/nearby?latitude=28.7041&longitude=77.1025&radius_km=1"
     )
     assert response.status_code == 200
     data = response.json()
