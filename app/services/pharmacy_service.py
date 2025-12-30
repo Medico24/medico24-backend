@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import and_, delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.redis_client import CacheManager
 from app.models.pharmacies import pharmacies, pharmacy_hours, pharmacy_locations
 from app.schemas.pharmacies import (
     PharmacyCreate,
@@ -18,8 +19,32 @@ from app.schemas.pharmacies import (
 class PharmacyService:
     """Service for pharmacy operations."""
 
+    # Cache TTL in seconds
+    PHARMACY_CACHE_TTL = 900  # 15 minutes for individual pharmacies
+    PHARMACY_LIST_CACHE_TTL = 300  # 5 minutes for lists
+
+    def __init__(self, cache_manager: CacheManager | None = None):
+        """Initialize service with optional cache manager."""
+        self.cache = cache_manager
+
     @staticmethod
-    async def create_pharmacy(db: AsyncSession, pharmacy_data: PharmacyCreate) -> dict:
+    def _get_pharmacy_cache_key(pharmacy_id: UUID) -> str:
+        """Generate cache key for pharmacy."""
+        return f"pharmacy:{pharmacy_id}"
+
+    @staticmethod
+    def _get_pharmacy_list_cache_key(
+        skip: int,
+        limit: int,
+        is_active: bool,
+        is_verified: bool | None,
+        supports_delivery: bool | None,
+        supports_pickup: bool | None,
+    ) -> str:
+        """Generate cache key for pharmacy list."""
+        return f"pharmacy:list:{skip}:{limit}:{is_active}:{is_verified}:{supports_delivery}:{supports_pickup}"
+
+    async def create_pharmacy(self, db: AsyncSession, pharmacy_data: PharmacyCreate) -> dict:
         """Create a new pharmacy with location and hours."""
         # Create pharmacy
         pharmacy_query = (
@@ -93,15 +118,25 @@ class PharmacyService:
 
         await db.commit()
 
+        # Invalidate list cache
+        if self.cache:
+            self.cache.delete_pattern("pharmacy:list:*")
+
         # Return complete pharmacy data
-        result = await PharmacyService.get_pharmacy_by_id(db, pharmacy_id)
+        result = await self.get_pharmacy_by_id(db, pharmacy_id)
         if not result:
             raise ValueError("Failed to retrieve created pharmacy")
         return result
 
-    @staticmethod
-    async def get_pharmacy_by_id(db: AsyncSession, pharmacy_id: UUID) -> dict | None:
-        """Get pharmacy by ID with location and hours."""
+    async def get_pharmacy_by_id(self, db: AsyncSession, pharmacy_id: UUID) -> dict | None:
+        """Get pharmacy by ID with location and hours (with caching)."""
+        # Try cache first
+        if self.cache:
+            cache_key = self._get_pharmacy_cache_key(pharmacy_id)
+            cached_pharmacy = self.cache.get_json(cache_key)
+            if cached_pharmacy:
+                return cached_pharmacy
+
         # Get pharmacy
         pharmacy_query = select(pharmacies).where(pharmacies.c.id == pharmacy_id)
         result = await db.execute(pharmacy_query)
@@ -129,10 +164,15 @@ class PharmacyService:
         result = await db.execute(hours_query)
         pharmacy_dict["hours"] = [dict(row) for row in result.mappings().all()]
 
+        # Cache the result
+        if self.cache:
+            cache_key = self._get_pharmacy_cache_key(pharmacy_id)
+            self.cache.set_json(cache_key, pharmacy_dict, ttl=self.PHARMACY_CACHE_TTL)
+
         return pharmacy_dict
 
-    @staticmethod
     async def get_pharmacies(
+        self,
         db: AsyncSession,
         skip: int = 0,
         limit: int = 20,
@@ -141,7 +181,16 @@ class PharmacyService:
         supports_delivery: bool | None = None,
         supports_pickup: bool | None = None,
     ) -> list[dict]:
-        """Get list of pharmacies with filtering."""
+        """Get list of pharmacies with filtering (with caching)."""
+        # Try cache first
+        if self.cache:
+            cache_key = self._get_pharmacy_list_cache_key(
+                skip, limit, is_active, is_verified, supports_delivery, supports_pickup
+            )
+            cached_list = self.cache.get_json(cache_key)
+            if cached_list:
+                return cached_list
+
         conditions = [pharmacies.c.is_active == is_active]
 
         if is_verified is not None:
@@ -171,10 +220,17 @@ class PharmacyService:
             location = location_result.mappings().first()
             pharmacy["location"] = dict(location) if location else None
 
+        # Cache the result
+        if self.cache:
+            cache_key = self._get_pharmacy_list_cache_key(
+                skip, limit, is_active, is_verified, supports_delivery, supports_pickup
+            )
+            self.cache.set_json(cache_key, pharmacy_list, ttl=self.PHARMACY_LIST_CACHE_TTL)
+
         return pharmacy_list
 
-    @staticmethod
     async def search_pharmacies_nearby(
+        self,
         db: AsyncSession,
         latitude: float,
         longitude: float,
@@ -301,11 +357,8 @@ class PharmacyService:
         return pharmacy_list
 
     @staticmethod
-    async def update_pharmacy(
-        db: AsyncSession, pharmacy_id: UUID, pharmacy_data: PharmacyUpdate
-    ) -> dict | None:
-        """Update pharmacy information."""
-        # Build update values
+    def _build_pharmacy_update_values(pharmacy_data: PharmacyUpdate) -> dict:
+        """Build update values from pharmacy data, excluding None values."""
         update_values = {}
         if pharmacy_data.name is not None:
             update_values["name"] = pharmacy_data.name
@@ -321,9 +374,16 @@ class PharmacyService:
             update_values["supports_pickup"] = pharmacy_data.supports_pickup
         if pharmacy_data.is_active is not None:
             update_values["is_active"] = pharmacy_data.is_active
+        return update_values
+
+    async def update_pharmacy(
+        self, db: AsyncSession, pharmacy_id: UUID, pharmacy_data: PharmacyUpdate
+    ) -> dict | None:
+        """Update pharmacy information."""
+        update_values = self._build_pharmacy_update_values(pharmacy_data)
 
         if not update_values:
-            return await PharmacyService.get_pharmacy_by_id(db, pharmacy_id)
+            return await self.get_pharmacy_by_id(db, pharmacy_id)
 
         update_values["updated_at"] = datetime.now(UTC)
 
@@ -341,14 +401,26 @@ class PharmacyService:
         if not updated:
             return None
 
-        return await PharmacyService.get_pharmacy_by_id(db, pharmacy_id)
+        # Invalidate cache
+        if self.cache:
+            cache_key = self._get_pharmacy_cache_key(pharmacy_id)
+            self.cache.delete(cache_key)
+            self.cache.delete_pattern("pharmacy:list:*")
 
-    @staticmethod
-    async def delete_pharmacy(db: AsyncSession, pharmacy_id: UUID) -> bool:
+        return await self.get_pharmacy_by_id(db, pharmacy_id)
+
+    async def delete_pharmacy(self, db: AsyncSession, pharmacy_id: UUID) -> bool:
         """Delete a pharmacy (cascades to locations and hours)."""
         query = delete(pharmacies).where(pharmacies.c.id == pharmacy_id)
         result = await db.execute(query)
         await db.commit()
+
+        # Invalidate cache
+        if self.cache:
+            cache_key = self._get_pharmacy_cache_key(pharmacy_id)
+            self.cache.delete(cache_key)
+            self.cache.delete_pattern("pharmacy:list:*")
+
         # Check if any rows were deleted
         return result.rowcount > 0  # type: ignore[attr-defined]
 
@@ -403,15 +475,14 @@ class PharmacyService:
                 },
             )
 
-    @staticmethod
     async def update_pharmacy_location(
-        db: AsyncSession, pharmacy_id: UUID, location_data: PharmacyLocationUpdate
+        self, db: AsyncSession, pharmacy_id: UUID, location_data: PharmacyLocationUpdate
     ) -> dict | None:
         """Update pharmacy location."""
         update_values = PharmacyService._build_location_update_values(location_data)
 
         if not update_values:
-            return await PharmacyService.get_pharmacy_by_id(db, pharmacy_id)
+            return await self.get_pharmacy_by_id(db, pharmacy_id)
 
         query = (
             update(pharmacy_locations)
@@ -424,11 +495,16 @@ class PharmacyService:
         await PharmacyService._update_geo_column(db, pharmacy_id, location_data)
         await db.commit()
 
-        return await PharmacyService.get_pharmacy_by_id(db, pharmacy_id)
+        # Invalidate cache
+        if self.cache:
+            cache_key = self._get_pharmacy_cache_key(pharmacy_id)
+            self.cache.delete(cache_key)
+            self.cache.delete_pattern("pharmacy:list:*")
 
-    @staticmethod
+        return await self.get_pharmacy_by_id(db, pharmacy_id)
+
     async def add_pharmacy_hours(
-        db: AsyncSession, pharmacy_id: UUID, hours_data: PharmacyHoursCreate
+        self, db: AsyncSession, pharmacy_id: UUID, hours_data: PharmacyHoursCreate
     ) -> dict | None:
         """Add or update pharmacy hours for a specific day."""
         # Check if hours already exist for this day
@@ -471,10 +547,15 @@ class PharmacyService:
         await db.commit()
 
         row = result.mappings().first()
+
+        # Invalidate cache
+        if self.cache and row:
+            cache_key = self._get_pharmacy_cache_key(pharmacy_id)
+            self.cache.delete(cache_key)
+
         return dict(row) if row else None
 
-    @staticmethod
-    async def get_pharmacy_hours(db: AsyncSession, pharmacy_id: UUID) -> list[dict]:
+    async def get_pharmacy_hours(self, db: AsyncSession, pharmacy_id: UUID) -> list[dict]:
         """Get all hours for a pharmacy."""
         query = (
             select(pharmacy_hours)
@@ -485,8 +566,9 @@ class PharmacyService:
         result = await db.execute(query)
         return [dict(row) for row in result.mappings().all()]
 
-    @staticmethod
-    async def delete_pharmacy_hours(db: AsyncSession, pharmacy_id: UUID, day_of_week: int) -> bool:
+    async def delete_pharmacy_hours(
+        self, db: AsyncSession, pharmacy_id: UUID, day_of_week: int
+    ) -> bool:
         """Delete pharmacy hours for a specific day."""
         query = delete(pharmacy_hours).where(
             and_(
@@ -496,5 +578,10 @@ class PharmacyService:
         )
         result = await db.execute(query)
         await db.commit()
+
+        # Invalidate cache
+        if self.cache:
+            cache_key = self._get_pharmacy_cache_key(pharmacy_id)
+            self.cache.delete(cache_key)
         # Check if any rows were deleted
         return result.rowcount > 0  # type: ignore[attr-defined]

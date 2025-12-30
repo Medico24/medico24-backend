@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.redis_client import CacheManager
 from app.models.users import users
 from app.schemas.users import UserCreate, UserUpdate
 
@@ -13,8 +14,19 @@ from app.schemas.users import UserCreate, UserUpdate
 class UserService:
     """Service for user operations."""
 
+    # Cache TTL in seconds (30 minutes for user profiles)
+    USER_CACHE_TTL = 1800
+
+    def __init__(self, cache_manager: CacheManager | None = None):
+        """Initialize service with optional cache manager."""
+        self.cache = cache_manager
+
     @staticmethod
-    async def create_user(db: AsyncSession, user_data: UserCreate) -> dict:
+    def _get_user_cache_key(user_id: UUID) -> str:
+        """Generate cache key for user."""
+        return f"user:{user_id}"
+
+    async def create_user(self, db: AsyncSession, user_data: UserCreate) -> dict:
         """Create a new user."""
         query = (
             users.insert()
@@ -34,40 +46,70 @@ class UserService:
 
         result = await db.execute(query)
         await db.commit()
-        return result.mappings().first()
+        user = result.mappings().first()
 
-    @staticmethod
-    async def get_user_by_id(db: AsyncSession, user_id: UUID) -> dict | None:
-        """Get user by internal ID."""
+        if not user:
+            raise ValueError("Failed to create user")
+
+        user_dict = dict(user)
+
+        # Cache the new user
+        if self.cache:
+            cache_key = self._get_user_cache_key(user_dict["id"])
+            self.cache.set_json(cache_key, user_dict, ttl=self.USER_CACHE_TTL)
+
+        return user_dict
+
+    async def get_user_by_id(self, db: AsyncSession, user_id: UUID) -> dict | None:
+        """Get user by internal ID with caching."""
+        # Try cache first
+        if self.cache:
+            cache_key = self._get_user_cache_key(user_id)
+            cached_user = self.cache.get_json(cache_key)
+            if cached_user:
+                return cached_user
+
+        # Query database
         query = select(users).where(users.c.id == user_id)
         result = await db.execute(query)
-        return result.mappings().first()
+        user = result.mappings().first()
 
-    @staticmethod
-    async def get_user_by_firebase_uid(db: AsyncSession, firebase_uid: str) -> dict | None:
+        if not user:
+            return None
+
+        user_dict = dict(user)
+
+        # Cache the result
+        if self.cache:
+            cache_key = self._get_user_cache_key(user_id)
+            self.cache.set_json(cache_key, user_dict, ttl=self.USER_CACHE_TTL)
+
+        return user_dict
+
+    async def get_user_by_firebase_uid(self, db: AsyncSession, firebase_uid: str) -> dict | None:
         """Get user by Firebase UID."""
         query = select(users).where(users.c.firebase_uid == firebase_uid)
         result = await db.execute(query)
-        return result.mappings().first()
+        user = result.mappings().first()
+        return dict(user) if user else None
 
-    @staticmethod
-    async def get_user_by_email(db: AsyncSession, email: str) -> dict | None:
+    async def get_user_by_email(self, db: AsyncSession, email: str) -> dict | None:
         """Get user by email."""
         query = select(users).where(users.c.email == email)
         result = await db.execute(query)
-        return result.mappings().first()
+        user = result.mappings().first()
+        return dict(user) if user else None
 
-    @staticmethod
     async def get_or_create_user(
-        db: AsyncSession, firebase_uid: str, email: str, user_data: UserCreate | None = None
+        self, db: AsyncSession, firebase_uid: str, email: str, user_data: UserCreate | None = None
     ) -> dict:
         """Get existing user or create a new one."""
         # Try to get existing user
-        user = await UserService.get_user_by_firebase_uid(db, firebase_uid)
+        user = await self.get_user_by_firebase_uid(db, firebase_uid)
 
         if user:
             # Update last login
-            await UserService.update_last_login(db, user["id"])
+            await self.update_last_login(db, user["id"])
             return user
 
         # Create new user if not exists
@@ -76,17 +118,19 @@ class UserService:
                 firebase_uid=firebase_uid,
                 email=email,
                 email_verified=True,
+                phone=None,
             )
 
-        return await UserService.create_user(db, user_data)
+        return await self.create_user(db, user_data)
 
-    @staticmethod
-    async def update_user(db: AsyncSession, user_id: UUID, user_data: UserUpdate) -> dict | None:
+    async def update_user(
+        self, db: AsyncSession, user_id: UUID, user_data: UserUpdate
+    ) -> dict | None:
         """Update user profile."""
         # Prepare update data
         update_data = user_data.model_dump(exclude_unset=True)
         if not update_data:
-            return await UserService.get_user_by_id(db, user_id)
+            return await self.get_user_by_id(db, user_id)
 
         update_data["updated_at"] = datetime.now(UTC)
 
@@ -94,17 +138,32 @@ class UserService:
 
         result = await db.execute(query)
         await db.commit()
-        return result.mappings().first()
+        user = result.mappings().first()
 
-    @staticmethod
-    async def update_last_login(db: AsyncSession, user_id: UUID) -> None:
+        if not user:
+            return None
+
+        user_dict = dict(user)
+
+        # Invalidate cache
+        if self.cache:
+            cache_key = self._get_user_cache_key(user_id)
+            self.cache.delete(cache_key)
+
+        return user_dict
+
+    async def update_last_login(self, db: AsyncSession, user_id: UUID) -> None:
         """Update user's last login timestamp."""
         query = update(users).where(users.c.id == user_id).values(last_login_at=datetime.now(UTC))
         await db.execute(query)
         await db.commit()
 
-    @staticmethod
-    async def mark_onboarded(db: AsyncSession, user_id: UUID) -> dict | None:
+        # Invalidate cache on last login update
+        if self.cache:
+            cache_key = self._get_user_cache_key(user_id)
+            self.cache.delete(cache_key)
+
+    async def mark_onboarded(self, db: AsyncSession, user_id: UUID) -> dict | None:
         """Mark user as onboarded."""
         query = (
             update(users)
@@ -115,10 +174,21 @@ class UserService:
 
         result = await db.execute(query)
         await db.commit()
-        return result.mappings().first()
+        user = result.mappings().first()
 
-    @staticmethod
-    async def deactivate_user(db: AsyncSession, user_id: UUID) -> dict | None:
+        if not user:
+            return None
+
+        user_dict = dict(user)
+
+        # Invalidate cache
+        if self.cache:
+            cache_key = self._get_user_cache_key(user_id)
+            self.cache.delete(cache_key)
+
+        return user_dict
+
+    async def deactivate_user(self, db: AsyncSession, user_id: UUID) -> dict | None:
         """Deactivate a user account."""
         query = (
             update(users)
@@ -129,10 +199,21 @@ class UserService:
 
         result = await db.execute(query)
         await db.commit()
-        return result.mappings().first()
+        user = result.mappings().first()
 
-    @staticmethod
-    async def activate_user(db: AsyncSession, user_id: UUID) -> dict | None:
+        if not user:
+            return None
+
+        user_dict = dict(user)
+
+        # Invalidate cache
+        if self.cache:
+            cache_key = self._get_user_cache_key(user_id)
+            self.cache.delete(cache_key)
+
+        return user_dict
+
+    async def activate_user(self, db: AsyncSession, user_id: UUID) -> dict | None:
         """Activate a user account."""
         query = (
             update(users)
@@ -143,12 +224,29 @@ class UserService:
 
         result = await db.execute(query)
         await db.commit()
-        return result.mappings().first()
+        user = result.mappings().first()
 
-    @staticmethod
-    async def delete_user(db: AsyncSession, user_id: UUID) -> bool:
+        if not user:
+            return None
+
+        user_dict = dict(user)
+
+        # Invalidate cache
+        if self.cache:
+            cache_key = self._get_user_cache_key(user_id)
+            self.cache.delete(cache_key)
+
+        return user_dict
+
+    async def delete_user(self, db: AsyncSession, user_id: UUID) -> bool:
         """Delete a user (hard delete)."""
         query = delete(users).where(users.c.id == user_id)
         result = await db.execute(query)
         await db.commit()
-        return result.rowcount > 0
+
+        # Invalidate cache
+        if self.cache:
+            cache_key = self._get_user_cache_key(user_id)
+            self.cache.delete(cache_key)
+
+        return result.rowcount > 0  # type: ignore[attr-defined]

@@ -62,6 +62,11 @@ class AuthService:
         # Extract user info from Firebase token
         firebase_uid = firebase_token_data["uid"]
         email = firebase_token_data.get("email")
+
+        # Ensure email is not None
+        if not email:
+            raise UnauthorizedException("Email is required from Firebase token")
+
         name = firebase_token_data.get("name", email)
         picture = firebase_token_data.get("picture")
         email_verified = firebase_token_data.get("email_verified", False)
@@ -85,11 +90,13 @@ class AuthService:
             given_name=given_name,
             family_name=family_name,
             photo_url=picture,
+            phone=None,
             auth_provider="google",
         )
 
-        # Get or create user
-        user = await UserService.get_or_create_user(
+        # Get or create user using UserService with cache
+        user_service = UserService(self.cache)
+        user = await user_service.get_or_create_user(
             db=db,
             firebase_uid=firebase_uid,
             email=email,
