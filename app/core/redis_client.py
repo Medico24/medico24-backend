@@ -1,5 +1,8 @@
 """Redis client configuration and utilities."""
 
+import json
+from typing import Any, cast
+
 import redis
 
 from app.config import settings
@@ -82,7 +85,7 @@ class RateLimiter:
             True if within limit, False if exceeded
         """
         try:
-            current = self.redis.get(key)
+            current = cast(str | None, self.redis.get(key))
 
             if current is None:
                 # First request
@@ -113,7 +116,7 @@ class CacheManager:
     def get(self, key: str) -> str | None:
         """Get value from cache."""
         try:
-            return self.redis.get(key)
+            return cast(str | None, self.redis.get(key))
         except Exception:
             return None
 
@@ -157,3 +160,66 @@ class CacheManager:
             return bool(self.redis.exists(key))
         except Exception:
             return False
+
+    def get_json(self, key: str) -> Any | None:
+        """
+        Get JSON value from cache and deserialize.
+
+        Args:
+            key: Cache key
+
+        Returns:
+            Deserialized object or None
+        """
+        try:
+            value = cast(str | None, self.redis.get(key))
+            if value:
+                return json.loads(value)
+            return None
+        except Exception:
+            return None
+
+    def set_json(
+        self,
+        key: str,
+        value: Any,
+        ttl: int | None = None,
+    ) -> bool:
+        """
+        Serialize and set JSON value in cache.
+
+        Args:
+            key: Cache key
+            value: Value to serialize and cache
+            ttl: Time to live in seconds
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            json_value = json.dumps(value, default=str)
+            if ttl:
+                self.redis.setex(key, ttl, json_value)
+            else:
+                self.redis.set(key, json_value)
+            return True
+        except Exception:
+            return False
+
+    def delete_pattern(self, pattern: str) -> int:
+        """
+        Delete all keys matching a pattern.
+
+        Args:
+            pattern: Redis key pattern (e.g., 'user:*')
+
+        Returns:
+            Number of keys deleted
+        """
+        try:
+            keys = cast(list[str], self.redis.keys(pattern))
+            if keys:
+                return cast(int, self.redis.delete(*keys))
+            return 0
+        except Exception:
+            return 0
