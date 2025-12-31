@@ -44,23 +44,49 @@ async def list_pharmacies(
     cache_manager: CacheManagerDep,
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(20, ge=1, le=100, description="Number of records to return"),
+    latitude: float | None = Query(
+        None, ge=-90, le=90, description="User's current latitude for nearby search"
+    ),
+    longitude: float | None = Query(
+        None, ge=-180, le=180, description="User's current longitude for nearby search"
+    ),
+    radius_km: float = Query(
+        10.0, gt=0, le=100, description="Search radius in kilometers (only used with lat/long)"
+    ),
     is_active: bool = Query(True, description="Filter by active status"),
     is_verified: bool | None = Query(None, description="Filter by verified status"),
     supports_delivery: bool | None = Query(None, description="Filter by delivery support"),
     supports_pickup: bool | None = Query(None, description="Filter by pickup support"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get list of pharmacies with optional filtering."""
+    """Get list of pharmacies with optional filtering and location-based search."""
     pharmacy_service = PharmacyService(cache_manager)
-    pharmacies_list = await pharmacy_service.get_pharmacies(
-        db=db,
-        skip=skip,
-        limit=limit,
-        is_active=is_active,
-        is_verified=is_verified,
-        supports_delivery=supports_delivery,
-        supports_pickup=supports_pickup,
-    )
+
+    # If location is provided, search nearby pharmacies
+    if latitude is not None and longitude is not None:
+        pharmacies_list = await pharmacy_service.search_pharmacies_nearby(
+            db=db,
+            latitude=latitude,
+            longitude=longitude,
+            radius_km=radius_km,
+            skip=skip,
+            limit=limit,
+            is_active=is_active,
+            is_verified=is_verified,
+            supports_delivery=supports_delivery,
+            supports_pickup=supports_pickup,
+        )
+    else:
+        # If no location provided, return all pharmacies with filters
+        pharmacies_list = await pharmacy_service.get_pharmacies(
+            db=db,
+            skip=skip,
+            limit=limit,
+            is_active=is_active,
+            is_verified=is_verified,
+            supports_delivery=supports_delivery,
+            supports_pickup=supports_pickup,
+        )
 
     return [PharmacyListResponse.model_validate(p) for p in pharmacies_list]
 
