@@ -17,6 +17,7 @@ from app.schemas.appointments import (
     AppointmentStatusUpdate,
     AppointmentUpdate,
 )
+from app.services.notification_service import NotificationService
 
 
 class AppointmentService:
@@ -61,7 +62,23 @@ class AppointmentService:
         await self.db.commit()
 
         row = result.fetchone()
-        return AppointmentResponse.model_validate(dict(row._mapping))
+        appointment_response = AppointmentResponse.model_validate(dict(row._mapping))
+
+        # Send push notification (async, non-blocking)
+        try:
+            await NotificationService.send_appointment_created_notification(
+                db=self.db,
+                user_id=patient_id,
+                appointment_data=dict(row._mapping),
+            )
+        except Exception as e:
+            # Log error but don't fail the request
+            import structlog
+
+            logger = structlog.get_logger()
+            logger.warning("failed_to_send_appointment_notification", error=str(e))
+
+        return appointment_response
 
     async def get_appointment(
         self,
@@ -234,8 +251,9 @@ class AppointmentService:
         Returns:
             Updated appointment
         """
-        # Check access
-        await self.get_appointment(appointment_id, user_id)
+        # Check access and get current state
+        current_appointment = await self.get_appointment(appointment_id, user_id)
+        old_status = current_appointment.status
 
         update_values = {
             "status": data.status.value,
@@ -259,7 +277,25 @@ class AppointmentService:
         await self.db.commit()
 
         row = result.fetchone()
-        return AppointmentResponse.model_validate(dict(row._mapping))
+        appointment_response = AppointmentResponse.model_validate(dict(row._mapping))
+
+        # Send push notification if status changed (async, non-blocking)
+        if old_status != data.status.value:
+            try:
+                await NotificationService.send_appointment_status_notification(
+                    db=self.db,
+                    user_id=user_id,
+                    appointment_data=dict(row._mapping),
+                    old_status=old_status,
+                )
+            except Exception as e:
+                # Log error but don't fail the request
+                import structlog
+
+                logger = structlog.get_logger()
+                logger.warning("failed_to_send_status_notification", error=str(e))
+
+        return appointment_response
 
     async def delete_appointment(
         self,
