@@ -22,7 +22,14 @@ import requests
 dotenv.load_dotenv()
 
 
-def send_notification(user_id: str, title: str, body: str, data: dict | None = None) -> dict:
+def send_notification(
+    user_id: str,
+    title: str,
+    body: str,
+    data: dict | None = None,
+    notification_type: str = "other",
+    priority: str = "normal",
+) -> dict:
     """Send admin notification to a user."""
     admin_notification_secret = os.getenv("ADMIN_NOTIFICATION_SECRET")
     if not admin_notification_secret:
@@ -41,6 +48,8 @@ def send_notification(user_id: str, title: str, body: str, data: dict | None = N
         "user_id": user_id,
         "title": title,
         "body": body,
+        "notification_type": notification_type,
+        "priority": priority,
     }
 
     if data:
@@ -87,6 +96,28 @@ Examples:
         type=str,
         help='Custom data payload as JSON string (e.g., \'{"type":"test"}\')',
     )
+    parser.add_argument(
+        "--type",
+        type=str,
+        default="other",
+        choices=[
+            "appointment_reminder",
+            "appointment_confirmation",
+            "appointment_cancelled",
+            "prescription_ready",
+            "pharmacy_update",
+            "system_announcement",
+            "other",
+        ],
+        help="Notification type (default: other)",
+    )
+    parser.add_argument(
+        "--priority",
+        type=str,
+        default="normal",
+        choices=["low", "normal", "high", "urgent"],
+        help="Notification priority (default: normal)",
+    )
 
     args = parser.parse_args()
 
@@ -100,7 +131,14 @@ Examples:
             sys.exit(1)
 
     # Send notification
-    result = send_notification(args.user_id, args.title, args.body, data)
+    result = send_notification(
+        args.user_id,
+        args.title,
+        args.body,
+        data,
+        args.type,
+        args.priority,
+    )
 
     # Print result
     print("✅ Notification sent successfully!")
