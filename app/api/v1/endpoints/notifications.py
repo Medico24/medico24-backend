@@ -1,11 +1,13 @@
 """Notification endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.schemas.notifications import (
+    AdminNotificationRequest,
     NotificationResponse,
     PushTokenRegister,
     PushTokenResponse,
@@ -148,6 +150,56 @@ async def send_notification(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins can send notifications",
+        )
+
+    success_count, failure_count = await NotificationService.send_to_user(
+        db=db,
+        user_id=str(request.user_id),
+        title=request.title,
+        body=request.body,
+        data=request.data,
+    )
+
+    return NotificationResponse(
+        success_count=success_count,
+        failure_count=failure_count,
+        message=f"Sent to {success_count} devices, {failure_count} failed",
+    )
+
+
+@router.post(
+    "/admin-send",
+    response_model=NotificationResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Send notification using admin secret key",
+)
+async def admin_send_notification(
+    request: AdminNotificationRequest,
+    db: AsyncSession = Depends(get_db),
+    x_admin_secret: str = Header(..., description="Admin secret key"),
+) -> NotificationResponse:
+    """
+    Send a push notification to a specific user using admin secret key.
+
+    This endpoint bypasses normal authentication and uses a secret key instead.
+    Use this for external systems or scripts that need to send notifications.
+
+    Args:
+        request: Notification details including user_id
+        db: Database session
+        x_admin_secret: Admin secret key (from X-Admin-Secret header)
+
+    Returns:
+        Number of successful and failed sends
+
+    Raises:
+        HTTPException: If secret key is invalid
+    """
+    # Verify admin secret key
+    if x_admin_secret != settings.admin_notification_secret:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid admin secret key",
         )
 
     success_count, failure_count = await NotificationService.send_to_user(

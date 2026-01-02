@@ -49,4 +49,12 @@ class NotificationResponse(BaseModel):
     success_count: int
     failure_count: int
     message: str
-    message: str
+
+
+class AdminNotificationRequest(BaseModel):
+    """Schema for admin notification endpoint (secret key authenticated)."""
+
+    user_id: UUID = Field(..., description="User ID to send notification to")
+    title: str = Field(..., min_length=1, max_length=100)
+    body: str = Field(..., min_length=1, max_length=500)
+    data: dict[str, str] | None = Field(default=None, description="Optional data payload")

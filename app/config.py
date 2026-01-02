@@ -57,6 +57,13 @@ class Settings(BaseSettings):
         description="Path to Firebase service account JSON file",
     )
 
+    # Admin Notification Secret
+    admin_notification_secret: str = Field(
+        default="test-admin-secret-for-development-only",
+        alias="ADMIN_NOTIFICATION_SECRET",
+        description="Secret key for admin notification endpoint",
+    )
+
     # CORS
     cors_origins_str: str = Field(
         default="http://localhost:3000",
