@@ -735,7 +735,7 @@ class NotificationService:
             by_priority[priority] = by_priority.get(priority, 0) + 1
 
         return {
-            "total": total,
+            "total_count": total,
             "by_status": by_status,
             "by_type": by_type,
             "by_priority": by_priority,

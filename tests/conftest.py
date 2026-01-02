@@ -21,6 +21,7 @@ from app.core.security import create_access_token
 from app.database import get_db
 from app.main import app
 from app.models.appointments import metadata as appointments_metadata
+from app.models.notifications import metadata as notifications_metadata
 from app.models.pharmacies import metadata as pharmacies_metadata
 from app.models.push_tokens import metadata as push_tokens_metadata
 from app.models.users import metadata as users_metadata
@@ -33,6 +34,8 @@ for table in users_metadata.tables.values():
 for table in pharmacies_metadata.tables.values():
     table.to_metadata(metadata)
 for table in push_tokens_metadata.tables.values():
+    table.to_metadata(metadata)
+for table in notifications_metadata.tables.values():
     table.to_metadata(metadata)
 
 # Test database URL - MUST be different from production

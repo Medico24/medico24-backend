@@ -657,3 +657,803 @@ async def test_admin_send_without_secret(
         json=notification_data,
     )
     assert response.status_code == 422  # Missing required header
+
+
+# ============================================================================
+# NOTIFICATION HISTORY TESTS
+# ============================================================================
+
+
+@pytest.fixture
+async def notification_with_deliveries(db_session, test_user):
+    """Create a notification with delivery records for testing."""
+    from app.models.notifications import notification_deliveries, notifications
+
+    # Create notification
+    notification_id = uuid4()
+    notification_data = {
+        "id": notification_id,
+        "user_id": test_user["id"],
+        "title": "Test Notification",
+        "body": "Test notification body",
+        "notification_type": "appointment_reminder",
+        "priority": "normal",
+        "status": "sent",
+    }
+    await db_session.execute(insert(notifications).values(**notification_data))
+
+    # Create push tokens
+    token_ids = []
+    for i in range(3):
+        token_id = uuid4()
+        token_data = {
+            "id": token_id,
+            "user_id": test_user["id"],
+            "fcm_token": f"test_token_{i}",
+            "platform": "android",
+            "is_active": True,
+        }
+        await db_session.execute(insert(push_tokens).values(**token_data))
+        token_ids.append(token_id)
+
+    # Create delivery records
+    for i, token_id in enumerate(token_ids):
+        delivery_data = {
+            "id": uuid4(),
+            "notification_id": notification_id,
+            "push_token_id": token_id,
+            "delivery_status": "delivered" if i < 2 else "failed",
+            "fcm_message_id": f"fcm_msg_{i}" if i < 2 else None,
+            "failure_reason": None if i < 2 else "Device not registered",
+        }
+        await db_session.execute(insert(notification_deliveries).values(**delivery_data))
+
+    await db_session.commit()
+    return notification_id
+
+
+@pytest.mark.asyncio
+async def test_get_my_notification_history(
+    client: AsyncClient,
+    auth_headers: dict,
+    test_user: dict,
+    db_session,
+) -> None:
+    """Test getting current user's notification history."""
+    from app.models.notifications import notifications
+
+    # Create multiple notifications
+    notification_ids = []
+    for i in range(5):
+        notification_id = uuid4()
+        notification_data = {
+            "id": notification_id,
+            "user_id": test_user["id"],
+            "title": f"Test Notification {i}",
+            "body": f"Body {i}",
+            "notification_type": (
+                "appointment_reminder" if i % 2 == 0 else "appointment_confirmation"
+            ),
+            "priority": "normal",
+            "status": "sent",
+        }
+        await db_session.execute(insert(notifications).values(**notification_data))
+        notification_ids.append(notification_id)
+
+    await db_session.commit()
+
+    # Get notification history
+    response = await client.get(
+        "/api/v1/notifications/history",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "notifications" in data
+    assert "total" in data
+    assert "page" in data
+    assert "page_size" in data
+    assert data["total"] == 5
+    assert len(data["notifications"]) == 5
+    assert data["page"] == 1
+
+
+@pytest.mark.asyncio
+async def test_get_notification_history_with_pagination(
+    client: AsyncClient,
+    auth_headers: dict,
+    test_user: dict,
+    db_session,
+) -> None:
+    """Test notification history pagination."""
+    from app.models.notifications import notifications
+
+    # Create 10 notifications
+    for i in range(10):
+        notification_data = {
+            "id": uuid4(),
+            "user_id": test_user["id"],
+            "title": f"Notification {i}",
+            "body": f"Body {i}",
+            "notification_type": "appointment_reminder",
+            "priority": "normal",
+            "status": "sent",
+        }
+        await db_session.execute(insert(notifications).values(**notification_data))
+
+    await db_session.commit()
+
+    # Get page 1 with 5 items
+    response = await client.get(
+        "/api/v1/notifications/history?page=1&page_size=5",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 10
+    assert len(data["notifications"]) == 5
+    assert data["page"] == 1
+    assert data["page_size"] == 5
+
+    # Get page 2
+    response = await client.get(
+        "/api/v1/notifications/history?page=2&page_size=5",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 10
+    assert len(data["notifications"]) == 5
+    assert data["page"] == 2
+
+
+@pytest.mark.asyncio
+async def test_get_notification_history_with_filters(
+    client: AsyncClient,
+    auth_headers: dict,
+    test_user: dict,
+    db_session,
+) -> None:
+    """Test notification history with status and type filters."""
+    from app.models.notifications import notifications
+
+    # Create notifications with different types and statuses
+    await db_session.execute(
+        insert(notifications).values(
+            id=uuid4(),
+            user_id=test_user["id"],
+            title="Appointment",
+            body="Body",
+            notification_type="appointment_reminder",
+            priority="normal",
+            status="sent",
+        )
+    )
+    await db_session.execute(
+        insert(notifications).values(
+            id=uuid4(),
+            user_id=test_user["id"],
+            title="Reminder",
+            body="Body",
+            notification_type="appointment_confirmation",
+            priority="normal",
+            status="sent",
+        )
+    )
+    await db_session.execute(
+        insert(notifications).values(
+            id=uuid4(),
+            user_id=test_user["id"],
+            title="Failed",
+            body="Body",
+            notification_type="appointment_reminder",
+            priority="normal",
+            status="failed",
+        )
+    )
+    await db_session.commit()
+
+    # Filter by type
+    response = await client.get(
+        "/api/v1/notifications/history?notification_type=appointment_reminder",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 2
+    assert all(n["notification_type"] == "appointment_reminder" for n in data["notifications"])
+
+    # Filter by status
+    response = await client.get(
+        "/api/v1/notifications/history?status=failed",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["notifications"][0]["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_get_notification_history_only_own_notifications(
+    client: AsyncClient,
+    auth_headers: dict,
+    test_user: dict,
+    db_session,
+) -> None:
+    """Test that users can only see their own notifications."""
+    from app.models.notifications import notifications
+    from app.models.users import users
+
+    # Create another user
+    other_user_id = uuid4()
+    other_user_data = {
+        "id": other_user_id,
+        "firebase_uid": f"other_user_{other_user_id}",
+        "email": "other@test.com",
+        "email_verified": True,
+        "auth_provider": "google",
+        "full_name": "Other User",
+        "role": "patient",
+        "is_active": True,
+        "is_onboarded": True,
+    }
+    await db_session.execute(insert(users).values(**other_user_data))
+
+    # Create notifications for both users
+    await db_session.execute(
+        insert(notifications).values(
+            id=uuid4(),
+            user_id=test_user["id"],
+            title="My Notification",
+            body="Body",
+            notification_type="appointment_reminder",
+            priority="normal",
+            status="sent",
+        )
+    )
+    await db_session.execute(
+        insert(notifications).values(
+            id=uuid4(),
+            user_id=other_user_id,
+            title="Other User Notification",
+            body="Body",
+            notification_type="appointment_reminder",
+            priority="normal",
+            status="sent",
+        )
+    )
+    await db_session.commit()
+
+    # Get history - should only see own notification
+    response = await client.get(
+        "/api/v1/notifications/history",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+    assert data["notifications"][0]["title"] == "My Notification"
+
+
+@pytest.mark.asyncio
+async def test_get_user_notification_history_admin_only(
+    client: AsyncClient,
+    auth_headers: dict,
+    admin_headers: dict,
+    test_user: dict,
+    db_session,
+) -> None:
+    """Test that admin-only endpoint requires admin role."""
+    from app.models.notifications import notifications
+
+    # Create notification for test user
+    await db_session.execute(
+        insert(notifications).values(
+            id=uuid4(),
+            user_id=test_user["id"],
+            title="Test Notification",
+            body="Body",
+            notification_type="appointment_reminder",
+            priority="normal",
+            status="sent",
+        )
+    )
+    await db_session.commit()
+
+    # Try as regular user - should fail
+    response = await client.get(
+        f"/api/v1/notifications/history/{test_user['id']}",
+        headers=auth_headers,
+    )
+    assert response.status_code == 403
+
+    # Try as admin - should succeed
+    response = await client.get(
+        f"/api/v1/notifications/history/{test_user['id']}",
+        headers=admin_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_get_notification_detail(
+    client: AsyncClient,
+    auth_headers: dict,
+    test_user: dict,
+    notification_with_deliveries: uuid4,
+    db_session,
+) -> None:
+    """Test getting detailed notification information."""
+    response = await client.get(
+        f"/api/v1/notifications/{notification_with_deliveries}",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "notification" in data
+    assert "deliveries" in data
+    assert "total_devices" in data
+    assert "successful_deliveries" in data
+    assert "failed_deliveries" in data
+
+    assert str(data["notification"]["id"]) == str(notification_with_deliveries)
+    assert data["total_devices"] == 3
+    assert data["successful_deliveries"] == 2
+    assert data["failed_deliveries"] == 1
+    assert len(data["deliveries"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_get_notification_detail_not_found(
+    client: AsyncClient,
+    auth_headers: dict,
+) -> None:
+    """Test getting non-existent notification."""
+    non_existent_id = uuid4()
+    response = await client.get(
+        f"/api/v1/notifications/{non_existent_id}",
+        headers=auth_headers,
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_notification_detail_other_user(
+    client: AsyncClient,
+    auth_headers: dict,
+    db_session,
+) -> None:
+    """Test that users cannot view other users' notifications."""
+    from app.models.notifications import notifications
+    from app.models.users import users
+
+    # Create another user
+    other_user_id = uuid4()
+    await db_session.execute(
+        insert(users).values(
+            id=other_user_id,
+            firebase_uid=f"other_{other_user_id}",
+            email="other@test.com",
+            email_verified=True,
+            auth_provider="google",
+            full_name="Other User",
+            role="patient",
+            is_active=True,
+            is_onboarded=True,
+        )
+    )
+
+    # Create notification for other user
+    notification_id = uuid4()
+    await db_session.execute(
+        insert(notifications).values(
+            id=notification_id,
+            user_id=other_user_id,
+            title="Other User Notification",
+            body="Body",
+            notification_type="appointment_reminder",
+            priority="normal",
+            status="sent",
+        )
+    )
+    await db_session.commit()
+
+    # Try to access - should fail
+    response = await client.get(
+        f"/api/v1/notifications/{notification_id}",
+        headers=auth_headers,
+    )
+    assert response.status_code == 404  # Not found (not authorized)
+
+
+@pytest.mark.asyncio
+async def test_get_notification_detail_admin_can_view_any(
+    client: AsyncClient,
+    admin_headers: dict,
+    test_user: dict,
+    notification_with_deliveries: uuid4,
+) -> None:
+    """Test that admins can view any notification."""
+    response = await client.get(
+        f"/api/v1/notifications/{notification_with_deliveries}",
+        headers=admin_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert str(data["notification"]["id"]) == str(notification_with_deliveries)
+
+
+@pytest.mark.asyncio
+async def test_mark_notification_as_read(
+    client: AsyncClient,
+    auth_headers: dict,
+    test_user: dict,
+    db_session,
+) -> None:
+    """Test marking notification as read."""
+    from app.models.notifications import notifications
+
+    # Create unread notification
+    notification_id = uuid4()
+    await db_session.execute(
+        insert(notifications).values(
+            id=notification_id,
+            user_id=test_user["id"],
+            title="Unread Notification",
+            body="Body",
+            notification_type="appointment_reminder",
+            priority="normal",
+            status="sent",
+        )
+    )
+    await db_session.commit()
+
+    # Mark as read
+    response = await client.patch(
+        f"/api/v1/notifications/{notification_id}/read",
+        headers=auth_headers,
+    )
+    assert response.status_code == 204
+
+    # Verify it was marked as read
+    result = await db_session.execute(
+        select(notifications).where(notifications.c.id == notification_id)
+    )
+    notification = result.fetchone()
+    assert notification.read_at is not None
+
+
+@pytest.mark.asyncio
+async def test_mark_notification_as_read_not_found(
+    client: AsyncClient,
+    auth_headers: dict,
+) -> None:
+    """Test marking non-existent notification as read."""
+    non_existent_id = uuid4()
+    response = await client.patch(
+        f"/api/v1/notifications/{non_existent_id}/read",
+        headers=auth_headers,
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_mark_notification_as_read_other_user(
+    client: AsyncClient,
+    auth_headers: dict,
+    db_session,
+) -> None:
+    """Test that users cannot mark other users' notifications as read."""
+    from app.models.notifications import notifications
+    from app.models.users import users
+
+    # Create another user
+    other_user_id = uuid4()
+    await db_session.execute(
+        insert(users).values(
+            id=other_user_id,
+            firebase_uid=f"other_{other_user_id}",
+            email="other@test.com",
+            email_verified=True,
+            auth_provider="google",
+            full_name="Other User",
+            role="patient",
+            is_active=True,
+            is_onboarded=True,
+        )
+    )
+
+    # Create notification for other user
+    notification_id = uuid4()
+    await db_session.execute(
+        insert(notifications).values(
+            id=notification_id,
+            user_id=other_user_id,
+            title="Other User Notification",
+            body="Body",
+            notification_type="appointment_reminder",
+            priority="normal",
+            status="sent",
+        )
+    )
+    await db_session.commit()
+
+    # Try to mark as read - should fail
+    response = await client.patch(
+        f"/api/v1/notifications/{notification_id}/read",
+        headers=auth_headers,
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_notification(
+    client: AsyncClient,
+    auth_headers: dict,
+    test_user: dict,
+    notification_with_deliveries: uuid4,
+    db_session,
+) -> None:
+    """Test deleting a notification."""
+    # Delete notification
+    response = await client.delete(
+        f"/api/v1/notifications/{notification_with_deliveries}",
+        headers=auth_headers,
+    )
+    assert response.status_code == 204
+
+    # Verify it was deleted (cascade should delete deliveries too)
+    from app.models.notifications import notification_deliveries, notifications
+
+    result = await db_session.execute(
+        select(notifications).where(notifications.c.id == notification_with_deliveries)
+    )
+    assert result.fetchone() is None
+
+    # Verify deliveries were also deleted
+    result = await db_session.execute(
+        select(notification_deliveries).where(
+            notification_deliveries.c.notification_id == notification_with_deliveries
+        )
+    )
+    assert result.fetchone() is None
+
+
+@pytest.mark.asyncio
+async def test_delete_notification_not_found(
+    client: AsyncClient,
+    auth_headers: dict,
+) -> None:
+    """Test deleting non-existent notification."""
+    non_existent_id = uuid4()
+    response = await client.delete(
+        f"/api/v1/notifications/{non_existent_id}",
+        headers=auth_headers,
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_notification_other_user(
+    client: AsyncClient,
+    auth_headers: dict,
+    db_session,
+) -> None:
+    """Test that users cannot delete other users' notifications."""
+    from app.models.notifications import notifications
+    from app.models.users import users
+
+    # Create another user
+    other_user_id = uuid4()
+    await db_session.execute(
+        insert(users).values(
+            id=other_user_id,
+            firebase_uid=f"other_{other_user_id}",
+            email="other@test.com",
+            email_verified=True,
+            auth_provider="google",
+            full_name="Other User",
+            role="patient",
+            is_active=True,
+            is_onboarded=True,
+        )
+    )
+
+    # Create notification for other user
+    notification_id = uuid4()
+    await db_session.execute(
+        insert(notifications).values(
+            id=notification_id,
+            user_id=other_user_id,
+            title="Other User Notification",
+            body="Body",
+            notification_type="appointment_reminder",
+            priority="normal",
+            status="sent",
+        )
+    )
+    await db_session.commit()
+
+    # Try to delete - should fail
+    response = await client.delete(
+        f"/api/v1/notifications/{notification_id}",
+        headers=auth_headers,
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_notification_admin_can_delete_any(
+    client: AsyncClient,
+    admin_headers: dict,
+    test_user: dict,
+    notification_with_deliveries: uuid4,
+    db_session,
+) -> None:
+    """Test that admins can delete any notification."""
+    response = await client.delete(
+        f"/api/v1/notifications/{notification_with_deliveries}",
+        headers=admin_headers,
+    )
+    assert response.status_code == 204
+
+    # Verify deletion
+    from app.models.notifications import notifications
+
+    result = await db_session.execute(
+        select(notifications).where(notifications.c.id == notification_with_deliveries)
+    )
+    assert result.fetchone() is None
+
+
+@pytest.mark.asyncio
+async def test_get_notification_stats(
+    client: AsyncClient,
+    auth_headers: dict,
+    test_user: dict,
+    db_session,
+) -> None:
+    """Test getting notification statistics."""
+    from app.models.notifications import notifications
+
+    # Create notifications with different statuses, types, and priorities
+    notifications_data = [
+        {"status": "sent", "notification_type": "appointment_reminder", "priority": "high"},
+        {"status": "sent", "notification_type": "appointment_confirmation", "priority": "normal"},
+        {"status": "failed", "notification_type": "appointment_cancelled", "priority": "normal"},
+        {"status": "sent", "notification_type": "prescription_ready", "priority": "low"},
+    ]
+
+    for notif_data in notifications_data:
+        await db_session.execute(
+            insert(notifications).values(
+                id=uuid4(),
+                user_id=test_user["id"],
+                title="Test",
+                body="Body",
+                **notif_data,
+            )
+        )
+    await db_session.commit()
+
+    # Get stats
+    response = await client.get(
+        "/api/v1/notifications/stats/summary",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "by_status" in data
+    assert "by_type" in data
+    assert "by_priority" in data
+    assert "total_count" in data
+
+    assert data["total_count"] == 4
+    assert data["by_status"]["sent"] == 3
+    assert data["by_status"]["failed"] == 1
+    assert data["by_type"]["appointment_reminder"] == 1
+    assert data["by_type"]["appointment_confirmation"] == 1
+    assert data["by_type"]["appointment_cancelled"] == 1
+    assert data["by_type"]["prescription_ready"] == 1
+
+
+@pytest.mark.asyncio
+async def test_get_notification_stats_with_days_filter(
+    client: AsyncClient,
+    auth_headers: dict,
+    test_user: dict,
+    db_session,
+) -> None:
+    """Test notification stats with days parameter."""
+    from app.models.notifications import notifications
+
+    # Create notification
+    await db_session.execute(
+        insert(notifications).values(
+            id=uuid4(),
+            user_id=test_user["id"],
+            title="Recent Notification",
+            body="Body",
+            notification_type="appointment_reminder",
+            priority="normal",
+            status="sent",
+        )
+    )
+    await db_session.commit()
+
+    # Get stats for last 7 days
+    response = await client.get(
+        "/api/v1/notifications/stats/summary?days=7",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_count"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_get_notification_stats_admin_sees_global(
+    client: AsyncClient,
+    auth_headers: dict,
+    admin_headers: dict,
+    test_user: dict,
+    admin_user: dict,
+    db_session,
+) -> None:
+    """Test that admins see global stats while users see their own."""
+    from app.models.notifications import notifications
+
+    # Create notifications for test user
+    await db_session.execute(
+        insert(notifications).values(
+            id=uuid4(),
+            user_id=test_user["id"],
+            title="User Notification",
+            body="Body",
+            notification_type="appointment_reminder",
+            priority="normal",
+            status="sent",
+        )
+    )
+
+    # Create notifications for admin user
+    await db_session.execute(
+        insert(notifications).values(
+            id=uuid4(),
+            user_id=admin_user["id"],
+            title="Admin Notification",
+            body="Body",
+            notification_type="appointment_confirmation",
+            priority="normal",
+            status="sent",
+        )
+    )
+    await db_session.commit()
+
+    # Regular user should see only their own
+    response = await client.get(
+        "/api/v1/notifications/stats/summary",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    user_data = response.json()
+    assert user_data["total_count"] == 1
+
+    # Admin should see all
+    response = await client.get(
+        "/api/v1/notifications/stats/summary",
+        headers=admin_headers,
+    )
+    assert response.status_code == 200
+    admin_data = response.json()
+    assert admin_data["total_count"] == 2

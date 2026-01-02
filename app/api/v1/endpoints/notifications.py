@@ -234,7 +234,7 @@ async def admin_send_notification(
 async def get_my_notification_history(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(50, ge=1, le=100, description="Items per page"),
-    status: str | None = Query(None, description="Filter by status"),
+    status_filter: str | None = Query(None, alias="status", description="Filter by status"),
     notification_type: str | None = Query(None, description="Filter by type"),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -245,7 +245,7 @@ async def get_my_notification_history(
     Args:
         page: Page number (starts at 1)
         page_size: Number of items per page (max 100)
-        status: Optional status filter
+        status_filter: Optional status filter
         notification_type: Optional type filter
         current_user: Authenticated user
         db: Database session
@@ -258,7 +258,7 @@ async def get_my_notification_history(
         user_id=str(current_user["id"]),
         page=page,
         page_size=page_size,
-        status_filter=status,
+        status_filter=status_filter,
         notification_type_filter=notification_type,
     )
 
@@ -279,7 +279,7 @@ async def get_user_notification_history(
     user_id: UUID,
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(50, ge=1, le=100, description="Items per page"),
-    status: str | None = Query(None, description="Filter by status"),
+    status_filter: str | None = Query(None, alias="status", description="Filter by status"),
     notification_type: str | None = Query(None, description="Filter by type"),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -291,7 +291,7 @@ async def get_user_notification_history(
         user_id: Target user ID
         page: Page number (starts at 1)
         page_size: Number of items per page (max 100)
-        status: Optional status filter
+        status_filter: Optional status filter
         notification_type: Optional type filter
         current_user: Authenticated admin user
         db: Database session
@@ -313,7 +313,7 @@ async def get_user_notification_history(
         user_id=str(user_id),
         page=page,
         page_size=page_size,
-        status_filter=status,
+        status_filter=status_filter,
         notification_type_filter=notification_type,
     )
 
