@@ -8,7 +8,7 @@ from app.dependencies import CacheManagerDep, DatabaseSession, get_current_user
 from app.schemas.users import UserProfile, UserResponse, UserUpdate
 from app.services.user_service import UserService
 
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(prefix="/users")
 
 
 @router.get("/me", response_model=UserResponse)

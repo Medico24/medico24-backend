@@ -1,6 +1,7 @@
 """Push notification schemas."""
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -41,6 +42,18 @@ class SendNotificationRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=100)
     body: str = Field(..., min_length=1, max_length=500)
     data: dict[str, str] | None = Field(default=None, description="Optional data payload")
+    notification_type: Literal[
+        "appointment_reminder",
+        "appointment_confirmation",
+        "appointment_cancelled",
+        "prescription_ready",
+        "pharmacy_update",
+        "system_announcement",
+        "other",
+    ] = Field(default="other", description="Type of notification")
+    priority: Literal["low", "normal", "high", "urgent"] = Field(
+        default="normal", description="Notification priority"
+    )
 
 
 class NotificationResponse(BaseModel):
@@ -58,3 +71,81 @@ class AdminNotificationRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=100)
     body: str = Field(..., min_length=1, max_length=500)
     data: dict[str, str] | None = Field(default=None, description="Optional data payload")
+    notification_type: Literal[
+        "appointment_reminder",
+        "appointment_confirmation",
+        "appointment_cancelled",
+        "prescription_ready",
+        "pharmacy_update",
+        "system_announcement",
+        "other",
+    ] = Field(default="other", description="Type of notification")
+    priority: Literal["low", "normal", "high", "urgent"] = Field(
+        default="normal", description="Notification priority"
+    )
+
+
+class NotificationRecord(BaseModel):
+    """Schema for notification record."""
+
+    id: UUID
+    user_id: UUID
+    title: str
+    body: str
+    notification_type: str
+    priority: str
+    data: dict | None
+    status: str
+    sent_at: datetime | None
+    delivered_at: datetime | None
+    read_at: datetime | None
+    failure_reason: str | None
+    retry_count: int
+    max_retries: int
+    scheduled_for: datetime | None
+    expires_at: datetime | None
+    metadata: dict | None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        """Pydantic config."""
+
+        from_attributes = True
+
+
+class NotificationDeliveryRecord(BaseModel):
+    """Schema for notification delivery record."""
+
+    id: UUID
+    notification_id: UUID
+    push_token_id: UUID
+    fcm_message_id: str | None
+    delivery_status: str
+    delivered_at: datetime | None
+    failure_reason: str | None
+    created_at: datetime
+
+    class Config:
+        """Pydantic config."""
+
+        from_attributes = True
+
+
+class NotificationHistoryResponse(BaseModel):
+    """Schema for notification history response."""
+
+    notifications: list[NotificationRecord]
+    total: int
+    page: int
+    page_size: int
+
+
+class NotificationDetailResponse(BaseModel):
+    """Schema for detailed notification with delivery info."""
+
+    notification: NotificationRecord
+    deliveries: list[NotificationDeliveryRecord]
+    total_devices: int
+    successful_deliveries: int
+    failed_deliveries: int

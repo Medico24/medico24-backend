@@ -18,7 +18,7 @@ from app.schemas.pharmacies import (
 )
 from app.services.pharmacy_service import PharmacyService
 
-router = APIRouter(prefix="/pharmacies", tags=["pharmacies"])
+router = APIRouter(prefix="/pharmacies")
 
 
 @router.post("", response_model=PharmacyResponse, status_code=status.HTTP_201_CREATED)
