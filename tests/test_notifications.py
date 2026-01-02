@@ -570,3 +570,90 @@ async def test_send_notification_with_custom_data(
 
     # Verify the mock was called
     mock_send_each_for_multicast.assert_called()
+
+
+@pytest.mark.asyncio
+@patch("app.services.notification_service.messaging.send_each_for_multicast")
+async def test_admin_send_with_valid_secret(
+    mock_send_each_for_multicast: AsyncMock,
+    client: AsyncClient,
+    test_user: dict,
+    db_session,
+) -> None:
+    """Test admin send endpoint with valid secret key."""
+    from app.config import settings
+
+    # Mock FCM send_each_for_multicast response
+    mock_response = MagicMock()
+    mock_response.success_count = 1
+    mock_response.failure_count = 0
+    mock_send_each_for_multicast.return_value = mock_response
+
+    # Register a token for test user
+    await db_session.execute(
+        insert(push_tokens).values(
+            user_id=test_user["id"],
+            fcm_token="test_device_token_admin",
+            platform="android",
+            is_active=True,
+        )
+    )
+    await db_session.commit()
+
+    # Send notification using admin secret
+    notification_data = {
+        "user_id": str(test_user["id"]),
+        "title": "Admin Test Notification",
+        "body": "Sent via admin secret",
+        "data": {"type": "admin_test"},
+    }
+
+    response = await client.post(
+        "/api/v1/notifications/admin-send",
+        json=notification_data,
+        headers={"X-Admin-Secret": settings.admin_notification_secret},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success_count"] == 1
+    assert data["failure_count"] == 0
+    assert "message" in data
+
+
+@pytest.mark.asyncio
+async def test_admin_send_with_invalid_secret(
+    client: AsyncClient,
+    test_user: dict,
+) -> None:
+    """Test admin send endpoint with invalid secret key."""
+    notification_data = {
+        "user_id": str(test_user["id"]),
+        "title": "Test Notification",
+        "body": "This should fail",
+    }
+
+    response = await client.post(
+        "/api/v1/notifications/admin-send",
+        json=notification_data,
+        headers={"X-Admin-Secret": "invalid_secret_key"},  # pragma: allowlist secret
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_admin_send_without_secret(
+    client: AsyncClient,
+    test_user: dict,
+) -> None:
+    """Test admin send endpoint without secret key header."""
+    notification_data = {
+        "user_id": str(test_user["id"]),
+        "title": "Test Notification",
+        "body": "This should fail",
+    }
+
+    response = await client.post(
+        "/api/v1/notifications/admin-send",
+        json=notification_data,
+    )
+    assert response.status_code == 422  # Missing required header
