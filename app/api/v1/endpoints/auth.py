@@ -1,5 +1,6 @@
 """Authentication endpoints."""
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +10,7 @@ from app.schemas.auth import GoogleAuthRequest, LoginResponse, TokenRefresh, Use
 from app.services.auth_service import AuthService
 
 router = APIRouter()
+logger = structlog.get_logger()
 
 
 @router.post(
@@ -46,11 +48,21 @@ async def firebase_verify(
     auth_service = AuthService(cache_manager)
 
     try:
+        logger.info("firebase_verify_started", token_length=len(request.id_token))
+
         # Verify Firebase ID token
+        logger.info("verifying_firebase_token")
         firebase_token_data = await auth_service.verify_firebase_id_token(request.id_token)
+        logger.info(
+            "firebase_token_verified",
+            uid=firebase_token_data.get("uid"),
+            email=firebase_token_data.get("email"),
+        )
 
         # Handle login (create/get user and generate tokens)
+        logger.info("handling_firebase_login")
         user, tokens = await auth_service.handle_firebase_login(firebase_token_data, db)
+        logger.info("firebase_login_handled", user_id=str(user["id"]), user_role=user.get("role"))
 
         return LoginResponse(
             access_token=tokens.access_token,
@@ -65,6 +77,7 @@ async def firebase_verify(
             ),
         )
     except Exception as e:
+        logger.error("firebase_verify_failed", error=str(e), error_type=type(e).__name__)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Authentication failed: {e!s}",
