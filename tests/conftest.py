@@ -211,3 +211,106 @@ def auth_headers(test_user) -> dict:
     }
     token = create_access_token(data=token_data, expires_delta=timedelta(minutes=30))
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture
+async def test_admin_user(db_session):
+    """Create a test admin user in the database."""
+    from uuid import uuid4
+
+    from sqlalchemy import insert
+
+    from app.models.users import users
+
+    user_id = uuid4()
+    user_data = {
+        "id": user_id,
+        "firebase_uid": f"test_admin_firebase_uid_{user_id}",
+        "email": "admin@medico24.com",
+        "email_verified": True,
+        "auth_provider": "google",
+        "full_name": "Admin User",
+        "phone": "+1234567890",
+        "role": "admin",
+        "is_active": True,
+        "is_onboarded": True,
+    }
+
+    await db_session.execute(insert(users).values(**user_data))
+    await db_session.commit()
+
+    return {
+        "id": user_id,
+        "firebase_uid": user_data["firebase_uid"],
+        "email": user_data["email"],
+        "full_name": user_data["full_name"],
+        "role": user_data["role"],
+    }
+
+
+@pytest.fixture
+def admin_token(test_admin_user) -> str:
+    """Create an admin JWT token for testing."""
+    token_data = {
+        "sub": str(test_admin_user["id"]),
+        "email": test_admin_user["email"],
+        "role": "admin",
+    }
+    return create_access_token(data=token_data, expires_delta=timedelta(minutes=30))
+
+
+@pytest.fixture
+def patient_token(test_user) -> str:
+    """Create a patient JWT token for testing."""
+    token_data = {
+        "sub": str(test_user["id"]),
+        "email": test_user["email"],
+        "role": "patient",
+    }
+    return create_access_token(data=token_data, expires_delta=timedelta(minutes=30))
+
+
+@pytest_asyncio.fixture
+async def test_pharmacy_id(db_session):
+    """Create a test pharmacy and return its ID."""
+    from uuid import uuid4
+
+    from sqlalchemy import insert
+
+    from app.models.pharmacies import pharmacies, pharmacy_locations
+
+    pharmacy_id = uuid4()
+    location_id = uuid4()
+
+    # Insert pharmacy
+    pharmacy_data = {
+        "id": pharmacy_id,
+        "name": "Test Pharmacy",
+        "description": "A test pharmacy",
+        "phone": "+1234567890",
+        "email": "pharmacy@test.com",
+        "supports_delivery": True,
+        "supports_pickup": True,
+        "is_verified": False,
+        "is_active": True,
+        "rating": 4.5,
+        "rating_count": 10,
+    }
+    await db_session.execute(insert(pharmacies).values(**pharmacy_data))
+
+    # Insert location
+    location_data = {
+        "id": location_id,
+        "pharmacy_id": pharmacy_id,
+        "address_line": "123 Test St",
+        "city": "Test City",
+        "state": "Test State",
+        "country": "India",
+        "pincode": "123456",
+        "latitude": 28.6139,
+        "longitude": 77.209,
+    }
+    await db_session.execute(insert(pharmacy_locations).values(**location_data))
+    await db_session.commit()
+
+    return str(pharmacy_id)
