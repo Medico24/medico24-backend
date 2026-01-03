@@ -20,8 +20,11 @@ from app.config import settings
 from app.core.security import create_access_token
 from app.database import get_db
 from app.main import app
+from app.models.admins import metadata as admins_metadata
 from app.models.appointments import metadata as appointments_metadata
+from app.models.doctors import metadata as doctors_metadata
 from app.models.notifications import metadata as notifications_metadata
+from app.models.patients import metadata as patients_metadata
 from app.models.pharmacies import metadata as pharmacies_metadata
 from app.models.push_tokens import metadata as push_tokens_metadata
 from app.models.users import metadata as users_metadata
@@ -30,6 +33,12 @@ metadata = MetaData()
 for table in appointments_metadata.tables.values():
     table.to_metadata(metadata)
 for table in users_metadata.tables.values():
+    table.to_metadata(metadata)
+for table in patients_metadata.tables.values():
+    table.to_metadata(metadata)
+for table in doctors_metadata.tables.values():
+    table.to_metadata(metadata)
+for table in admins_metadata.tables.values():
     table.to_metadata(metadata)
 for table in pharmacies_metadata.tables.values():
     table.to_metadata(metadata)
@@ -168,6 +177,7 @@ async def test_user(db_session):
 
     from sqlalchemy import insert
 
+    from app.models.patients import patients
     from app.models.users import users
 
     # Generate a UUID for test user
@@ -187,6 +197,10 @@ async def test_user(db_session):
 
     # Insert user
     await db_session.execute(insert(users).values(**user_data))
+
+    # Insert patient record
+    await db_session.execute(insert(patients).values(user_id=user_id))
+
     await db_session.commit()
 
     # Return user data for test use
@@ -220,6 +234,7 @@ async def test_admin_user(db_session):
 
     from sqlalchemy import insert
 
+    from app.models.admins import admins
     from app.models.users import users
 
     user_id = uuid4()
@@ -237,6 +252,10 @@ async def test_admin_user(db_session):
     }
 
     await db_session.execute(insert(users).values(**user_data))
+
+    # Insert admin record
+    await db_session.execute(insert(admins).values(user_id=user_id))
+
     await db_session.commit()
 
     return {
