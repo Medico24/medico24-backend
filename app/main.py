@@ -7,7 +7,7 @@ import structlog
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from prometheus_client import make_asgi_app
+from prometheus_fastapi_instrumentator import Instrumentator
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1.router import api_router
@@ -114,9 +114,17 @@ app.add_exception_handler(Exception, general_exception_handler)  # type: ignore[
 # Include API router
 app.include_router(api_router, prefix=settings.api_v1_prefix)
 
-# Add Prometheus metrics endpoint
-metrics_app = make_asgi_app()
-app.mount("/metrics", metrics_app)
+# Setup Prometheus instrumentation
+Instrumentator(
+    should_group_status_codes=True,
+    should_ignore_untemplated=False,
+    should_respect_env_var=True,
+    should_instrument_requests_inprogress=True,
+    excluded_handlers=["/metrics", "/docs", "/redoc", "/openapi.json"],
+    env_var_name="ENABLE_METRICS",
+    inprogress_name="http_requests_inprogress",
+    inprogress_labels=True,
+).instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
 
 
 @app.get("/", tags=["Root"])

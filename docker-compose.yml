@@ -4,6 +4,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    container_name: medico24-backend-api
     ports:
       - "8000:8000"
     env_file:
@@ -12,6 +13,8 @@ services:
       - ./firebase-service-account.json:/app/secrets/firebase-service-account.json:ro
     environment:
       - FIREBASE_CREDENTIALS_PATH=/app/secrets/firebase-service-account.json
+      - LOG_FORMAT=json
+      - ENABLE_METRICS=true
     depends_on:
       postgres:
         condition: service_healthy
@@ -26,10 +29,14 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    labels:
+      - "com.medico24.service=backend-api"
+      - "com.medico24.description=FastAPI Backend"
 
   # PostgreSQL database (for local development)
   postgres:
     image: postgres:16-alpine
+    container_name: medico24-postgres
     environment:
       - POSTGRES_USER=medico24
       - POSTGRES_PASSWORD=medico24_dev_password
@@ -46,10 +53,14 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    labels:
+      - "com.medico24.service=postgres"
+      - "com.medico24.description=PostgreSQL Database"
 
   # Redis (for local development)
   redis:
     image: redis:7-alpine
+    container_name: medico24-redis
     command: redis-server --save 60 1 --loglevel warning
     ports:
       - "6379:6379"
@@ -63,6 +74,9 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    labels:
+      - "com.medico24.service=redis"
+      - "com.medico24.description=Redis Cache"
 
   # Nginx reverse proxy (optional for production)
   # nginx:

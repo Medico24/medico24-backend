@@ -3,6 +3,7 @@
 import logging
 import sys
 import time
+import uuid
 from collections.abc import Callable
 
 import structlog
@@ -70,28 +71,47 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         """
         logger = structlog.get_logger()
 
+        # Generate unique request ID
+        request_id = str(uuid.uuid4())
+        request.state.request_id = request_id
+
         # Start timer
         start_time = time.time()
+
+        # Extract user info if available
+        user_id = None
+        if hasattr(request.state, "user") and request.state.user:
+            user_id = str(request.state.user.id)
 
         # Log request
         logger.info(
             "request_started",
+            request_id=request_id,
             method=request.method,
             path=request.url.path,
+            endpoint=str(request.url),
             client=request.client.host if request.client else None,
+            user_id=user_id,
         )
 
         # Process request
         try:
             response = await call_next(request)
         except Exception as e:
+            # Calculate duration
+            duration = time.time() - start_time
+
             # Log error
             logger.error(
                 "request_failed",
+                request_id=request_id,
                 method=request.method,
                 path=request.url.path,
+                endpoint=str(request.url),
                 error=str(e),
-                duration=time.time() - start_time,
+                error_type=type(e).__name__,
+                duration=duration,
+                user_id=user_id,
             )
             raise
 
@@ -101,13 +121,17 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         # Log response
         logger.info(
             "request_completed",
+            request_id=request_id,
             method=request.method,
             path=request.url.path,
+            endpoint=str(request.url),
             status_code=response.status_code,
             duration=duration,
+            user_id=user_id,
         )
 
-        # Add duration header
+        # Add headers for tracing
+        response.headers["X-Request-ID"] = request_id
         response.headers["X-Process-Time"] = str(duration)
 
         return response
