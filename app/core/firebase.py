@@ -87,7 +87,8 @@ async def verify_firebase_token(id_token: str) -> dict:
     """
     try:
         # Verify the token and get user claims
-        decoded_token = auth.verify_id_token(id_token)
+        # check_revoked=False for better performance, clock_skew_seconds=10 to tolerate clock differences
+        decoded_token = auth.verify_id_token(id_token, clock_skew_seconds=10)
 
         logger.info(
             "Firebase token verified",
