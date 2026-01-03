@@ -43,7 +43,8 @@ class Settings(BaseSettings):
     jwt_secret_key: str = Field(..., alias="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
     access_token_expire_minutes: int = Field(default=30, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
-    refresh_token_expire_days: int = Field(default=7, alias="REFRESH_TOKEN_EXPIRE_DAYS")
+    # Refresh token valid for 1 year
+    refresh_token_expire_days: int = Field(default=365, alias="REFRESH_TOKEN_EXPIRE_DAYS")
 
     # Google OAuth
     google_client_id: str = Field(..., alias="GOOGLE_CLIENT_ID")

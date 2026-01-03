@@ -162,13 +162,13 @@ class AuthService:
 
         return self.create_tokens(user_id)
 
-    def revoke_token(self, token: str, ttl: int = 86400 * 7) -> None:
+    def revoke_token(self, token: str, ttl: int = 86400 * 365) -> None:
         """
         Revoke a refresh token by adding it to blacklist.
 
         Args:
             token: Token to revoke
-            ttl: Time to live for blacklist entry (default: 7 days)
+            ttl: Time to live for blacklist entry (default: 365 days)
         """
         self.cache.set(f"blacklist:{token}", "1", ttl=ttl)
 
