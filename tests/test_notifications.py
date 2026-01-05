@@ -1,7 +1,7 @@
 """Tests for notification endpoints."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from httpx import AsyncClient
@@ -987,7 +987,7 @@ async def test_get_notification_detail(
     client: AsyncClient,
     auth_headers: dict,
     test_user: dict,
-    notification_with_deliveries: uuid4,
+    notification_with_deliveries: UUID,
     db_session,
 ) -> None:
     """Test getting detailed notification information."""
@@ -1079,7 +1079,7 @@ async def test_get_notification_detail_admin_can_view_any(
     client: AsyncClient,
     admin_headers: dict,
     test_user: dict,
-    notification_with_deliveries: uuid4,
+    notification_with_deliveries: UUID,
 ) -> None:
     """Test that admins can view any notification."""
     response = await client.get(
@@ -1199,7 +1199,7 @@ async def test_delete_notification(
     client: AsyncClient,
     auth_headers: dict,
     test_user: dict,
-    notification_with_deliveries: uuid4,
+    notification_with_deliveries: UUID,
     db_session,
 ) -> None:
     """Test deleting a notification."""
@@ -1295,7 +1295,7 @@ async def test_delete_notification_admin_can_delete_any(
     client: AsyncClient,
     admin_headers: dict,
     test_user: dict,
-    notification_with_deliveries: uuid4,
+    notification_with_deliveries: UUID,
     db_session,
 ) -> None:
     """Test that admins can delete any notification."""

@@ -118,10 +118,8 @@ app.include_router(api_router, prefix=settings.api_v1_prefix)
 Instrumentator(
     should_group_status_codes=True,
     should_ignore_untemplated=False,
-    should_respect_env_var=True,
     should_instrument_requests_inprogress=True,
-    excluded_handlers=["/metrics", "/docs", "/redoc", "/openapi.json"],
-    env_var_name="ENABLE_METRICS",
+    excluded_handlers=["/docs", "/redoc", "/openapi.json"],
     inprogress_name="http_requests_inprogress",
     inprogress_labels=True,
 ).instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
