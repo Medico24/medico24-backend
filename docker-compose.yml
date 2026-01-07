@@ -22,13 +22,16 @@ services:
         condition: service_healthy
     networks:
       - medico24-network
-    restart: unless-stopped
+    restart: no
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    profiles:
+      - all
+      - server
     labels:
       - "com.medico24.service=backend-api"
       - "com.medico24.description=FastAPI Backend"
@@ -52,7 +55,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
+    restart: no
+    profiles:
+      - all
+      - db
     labels:
       - "com.medico24.service=postgres"
       - "com.medico24.description=PostgreSQL Database"
@@ -73,7 +79,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
+    restart: no
+    profiles:
+      - all
+      - db
     labels:
       - "com.medico24.service=redis"
       - "com.medico24.description=Redis Cache"
@@ -91,7 +100,13 @@ services:
   #     - api
   #   networks:
   #     - medico24-network
-  #   restart: unless-stopped
+  #   restart: no
+  #   profiles:
+  #     - all
+  #     - app
+  #   labels:
+  #     - "com.medico24.service=nginx"
+  #     - "com.medico24.description=Nginx Reverse Proxy"
 
 volumes:
   postgres_data:
