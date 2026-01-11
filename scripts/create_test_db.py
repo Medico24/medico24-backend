@@ -41,7 +41,7 @@ def main():
     if not test_db:
         errors.append("❌ TEST_DATABASE_URL is not set in .env")
         errors.append(
-            "   Add: TEST_DATABASE_URL=postgresql://user:pass@host/dbname_test?ssl=require"
+            "   Add: TEST_DATABASE_URL=postgresql://user:password@host/dbname_test?ssl=require"
         )
 
     if test_db == prod_db:
