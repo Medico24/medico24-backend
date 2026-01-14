@@ -7,6 +7,16 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class DashboardStatsResponse(BaseModel):
+    """Response schema for dashboard statistics."""
+
+    stats: dict[str, Any] = Field(description="Current statistics")
+    chart_data: list[dict[str, Any]] = Field(description="Time series data for charts")
+    recent_activity: list[dict[str, Any]] = Field(description="Recent system activity")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class AdminUserListResponse(BaseModel):
     """Response schema for admin user listing."""
 
@@ -35,20 +45,18 @@ class AdminMetricsResponse(BaseModel):
     """Response schema for admin metrics."""
 
     users: dict[str, int] = Field(
-        ..., description="User metrics (total, active)", example={"total": 1000, "active": 850}
+        description="User metrics (total, active)", examples=[{"total": 1000, "active": 850}]
     )
     appointments: dict[str, int] = Field(
-        ...,
         description="Appointment metrics (total, pending, confirmed)",
-        example={"total": 5000, "pending": 120, "confirmed": 200},
+        examples=[{"total": 5000, "pending": 120, "confirmed": 200}],
     )
     pharmacies: dict[str, int] = Field(
-        ...,
         description="Pharmacy metrics (total, verified, active)",
-        example={"total": 150, "verified": 120, "active": 145},
+        examples=[{"total": 150, "verified": 120, "active": 145}],
     )
     notifications: dict[str, int] = Field(
-        ..., description="Notification metrics (sent_today)", example={"sent_today": 320}
+        description="Notification metrics (sent_today)", examples=[{"sent_today": 320}]
     )
 
     model_config = ConfigDict(from_attributes=True)
