@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     google_client_id: str = Field(..., alias="GOOGLE_CLIENT_ID")
     google_client_secret: str = Field(..., alias="GOOGLE_CLIENT_SECRET")
     google_redirect_uri: str = Field(..., alias="GOOGLE_REDIRECT_URI")
+    google_maps_api_key: str = Field(default="", alias="GOOGLE_MAPS_API_KEY")
 
     # Firebase
     firebase_credentials_path: str = Field(

@@ -2,12 +2,22 @@
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import admin, appointments, auth, health, notifications, pharmacies, users
+from app.api.v1.endpoints import (
+    admin,
+    appointments,
+    auth,
+    environment,
+    health,
+    notifications,
+    pharmacies,
+    users,
+)
 
 api_router = APIRouter()
 
 # Include routers
 api_router.include_router(health.router, tags=["Health"])
+api_router.include_router(environment.router, prefix="/environment", tags=["Environment"])
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 api_router.include_router(users.router, tags=["Users"])
 api_router.include_router(appointments.router, prefix="/appointments", tags=["Appointments"])
