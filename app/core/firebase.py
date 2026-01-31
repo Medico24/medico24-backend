@@ -1,5 +1,6 @@
 """Firebase Admin SDK initialization and utilities."""
 
+import json
 import os
 
 import firebase_admin
@@ -11,18 +12,20 @@ logger = get_logger(__name__)
 _firebase_app: firebase_admin.App | None = None
 
 
-def initialize_firebase(credentials_path: str | None = None) -> None:
+def initialize_firebase(
+    firebase_credentials_path: str | None = None, firebase_config_json: str | None = None
+) -> None:
     """
     Initialize Firebase Admin SDK.
 
     Args:
-        credentials_path: Optional path to service account JSON file.
-                         If not provided, will check environment variables.
+        firebase_config_json: Optional raw JSON string of service account.
+        firebase_credentials_path: Optional path to service account JSON file.
 
     Looks for Firebase credentials in order:
     1. credentials_path parameter
-    2. FIREBASE_CREDENTIALS_PATH environment variable
-    3. GOOGLE_APPLICATION_CREDENTIALS environment variable
+    2. FIREBASE_CONFIG_JSON environment variable
+    3. FIREBASE_CREDENTIALS_PATH environment variable
     4. Default application credentials
 
     Note: For production, use FIREBASE_CREDENTIALS_PATH or service account JSON.
@@ -35,19 +38,23 @@ def initialize_firebase(credentials_path: str | None = None) -> None:
         return
 
     try:
-        # Check for explicit Firebase credentials path
-        cred_path = (
-            credentials_path
-            or os.getenv("FIREBASE_CREDENTIALS_PATH")
-            or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-        )
+        cred = None
 
-        if cred_path and os.path.exists(cred_path):
-            cred = credentials.Certificate(cred_path)
+        # 1. Try raw JSON string (Vercel / Production)
+        if firebase_config_json:
+            logger.info("Initializing Firebase with JSON string from environment")
+            cred_dict = json.loads(firebase_config_json)
+            cred = credentials.Certificate(cred_dict)
+
+        # 2. Fallback to File Path (Local Dev)
+        elif firebase_credentials_path and os.path.exists(firebase_credentials_path):
+            logger.info("Initializing Firebase with JSON file", path=firebase_credentials_path)
+            cred = credentials.Certificate(firebase_credentials_path)
+
+        if cred:
             _firebase_app = firebase_admin.initialize_app(cred)
-            logger.info("Firebase initialized with service account", path=cred_path)
         else:
-            # Try to initialize with default credentials
+            # Last resort: Try default credentials
             _firebase_app = firebase_admin.initialize_app()
             logger.info("Firebase initialized with default credentials")
 
@@ -99,11 +106,8 @@ async def verify_firebase_token(id_token: str) -> dict:
         return decoded_token
 
     except auth.InvalidIdTokenError as e:
-        logger.warning("Invalid Firebase ID token", error=str(e))
+        logger.warning("Invalid or expired Firebase ID token", error=str(e))
         raise ValueError(f"Invalid Firebase ID token: {e!s}")
-    except auth.ExpiredIdTokenError as e:
-        logger.warning("Expired Firebase ID token", error=str(e))
-        raise ValueError("Firebase ID token has expired")
     except Exception as e:
         logger.error("Firebase token verification failed", error=str(e))
         raise ValueError(f"Token verification failed: {e!s}")

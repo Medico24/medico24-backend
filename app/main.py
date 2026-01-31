@@ -41,13 +41,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Initialize Firebase Admin SDK
     try:
-        initialize_firebase(settings.firebase_credentials_path or None)
+        initialize_firebase(
+            firebase_credentials_path=settings.firebase_credentials_path or None,
+            firebase_config_json=settings.firebase_config_json or None,
+        )
         logger.info("firebase_initialized")
     except Exception as e:
         logger.warning(
             "firebase_initialization_failed",
             error=str(e),
-            note="Firebase auth will not work. Set FIREBASE_CREDENTIALS_PATH env var.",
+            note="Firebase auth will not work. Set FIREBASE_CREDENTIALS_PATH or FIREBASE_CONFIG_JSON env var.",
         )
 
     # Test database connection

@@ -53,10 +53,16 @@ class Settings(BaseSettings):
     google_maps_api_key: str = Field(default="", alias="GOOGLE_MAPS_API_KEY")
 
     # Firebase
-    firebase_credentials_path: str = Field(
-        default="",
+    firebase_credentials_path: str | None = Field(
+        default=None,
         alias="FIREBASE_CREDENTIALS_PATH",
         description="Path to Firebase service account JSON file",
+    )
+
+    firebase_config_json: str | None = Field(
+        default=None,
+        alias="FIREBASE_CONFIG_JSON",
+        description="Raw JSON string of the Firebase service account",
     )
 
     # Admin Notification Secret
