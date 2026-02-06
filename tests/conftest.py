@@ -22,6 +22,8 @@ from app.database import get_db
 from app.main import app
 from app.models.admins import metadata as admins_metadata
 from app.models.appointments import metadata as appointments_metadata
+from app.models.clinics import metadata as clinics_metadata
+from app.models.doctor_clinics import metadata as doctor_clinics_metadata
 from app.models.doctors import metadata as doctors_metadata
 from app.models.notifications import metadata as notifications_metadata
 from app.models.patients import metadata as patients_metadata
@@ -37,6 +39,10 @@ for table in users_metadata.tables.values():
 for table in patients_metadata.tables.values():
     table.to_metadata(metadata)
 for table in doctors_metadata.tables.values():
+    table.to_metadata(metadata)
+for table in clinics_metadata.tables.values():
+    table.to_metadata(metadata)
+for table in doctor_clinics_metadata.tables.values():
     table.to_metadata(metadata)
 for table in admins_metadata.tables.values():
     table.to_metadata(metadata)
