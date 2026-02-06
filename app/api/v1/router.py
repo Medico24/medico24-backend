@@ -6,6 +6,8 @@ from app.api.v1.endpoints import (
     admin,
     appointments,
     auth,
+    clinics,
+    doctors,
     environment,
     health,
     notifications,
@@ -21,6 +23,8 @@ api_router.include_router(environment.router, prefix="/environment", tags=["Envi
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 api_router.include_router(users.router, tags=["Users"])
 api_router.include_router(appointments.router, prefix="/appointments", tags=["Appointments"])
+api_router.include_router(clinics.router, prefix="/clinics", tags=["Clinics"])
+api_router.include_router(doctors.router, prefix="/doctors", tags=["Doctors"])
 api_router.include_router(pharmacies.router, tags=["Pharmacies"])
 api_router.include_router(notifications.router, tags=["Notifications"])
 api_router.include_router(admin.router, tags=["Admin"])
