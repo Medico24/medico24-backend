@@ -4,7 +4,7 @@ from datetime import datetime, time
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator
 
 # ============================================================================
 # Pharmacy Hours Schemas
@@ -139,6 +139,11 @@ class PharmacyInDB(PharmacyBase):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("rating", when_used="json")
+    def serialize_decimal(self, value: Decimal | None) -> float | None:
+        """Serialize Decimal to float for JSON."""
+        return float(value) if value is not None else None
 
 
 class PharmacyResponse(PharmacyInDB):
