@@ -3,6 +3,7 @@
 from sqlalchemy import (
     CheckConstraint,
     Column,
+    ForeignKey,
     MetaData,
     Table,
     Text,
@@ -24,10 +25,20 @@ appointments = Table(
         server_default=text("gen_random_uuid()"),
     ),
     # Ownership / references
-    Column("patient_id", UUID, nullable=False),
-    Column("doctor_id", UUID, nullable=True),
-    Column("clinic_id", UUID, nullable=True),
-    # Snapshot fields (denormalized for history)
+    Column("patient_id", UUID, nullable=False, index=True),
+    Column(
+        "doctor_id", UUID, ForeignKey("doctors.id", ondelete="SET NULL"), nullable=True, index=True
+    ),
+    Column(
+        "clinic_id", UUID, ForeignKey("clinics.id", ondelete="SET NULL"), nullable=True, index=True
+    ),
+    Column(
+        "doctor_clinic_id",
+        UUID,
+        ForeignKey("doctor_clinics.id", ondelete="SET NULL"),
+        nullable=True,
+    ),
+    # Snapshot fields (denormalized for history/audit)
     Column("clinic_name", Text, nullable=True),
     Column("doctor_name", Text, nullable=False),
     # Appointment details
