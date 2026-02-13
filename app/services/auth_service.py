@@ -131,7 +131,7 @@ class AuthService:
         return Token(
             access_token=access_token,
             refresh_token=refresh_token,
-            token_type="bearer",
+            token_type="bearer",  # nosec B106
         )
 
     def refresh_access_token(self, refresh_token: str) -> Token:
