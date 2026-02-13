@@ -1,6 +1,7 @@
 """Clinic service for business logic."""
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import and_, func, select, update
@@ -207,7 +208,7 @@ class ClinicService:
             return None
 
         # Build update values
-        update_values = {}
+        update_values: dict[str, Any] = {}
         if clinic_data.name is not None:
             update_values["name"] = clinic_data.name
         if clinic_data.slug is not None:
@@ -374,7 +375,7 @@ class ClinicService:
     ) -> dict | None:
         """Update doctor-clinic association."""
         # Build update values
-        update_values = {}
+        update_values: dict[str, Any] = {}
         if update_data.is_primary is not None:
             update_values["is_primary"] = update_data.is_primary
         if update_data.consultation_fee is not None:

@@ -1,9 +1,10 @@
 """Doctor service for business logic."""
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis_client import CacheManager
@@ -187,7 +188,7 @@ class DoctorService:
                 users.c.profile_picture_url,
             )
             .join(users, doctors.c.user_id == users.c.id)
-            .where(and_(*conditions) if conditions else True)
+            .where(and_(*conditions) if conditions else text("1=1"))  # type: ignore[arg-type]
             .order_by(doctors.c.rating.desc().nullslast(), doctors.c.experience_years.desc())
             .offset(skip)
             .limit(limit)
@@ -275,7 +276,7 @@ class DoctorService:
             return None
 
         # Build update values
-        update_values = {}
+        update_values: dict[str, Any] = {}
         if doctor_data.specialization is not None:
             update_values["specialization"] = doctor_data.specialization
         if doctor_data.sub_specialization is not None:

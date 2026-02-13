@@ -1,6 +1,7 @@
 """Pharmacy service for business logic."""
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import and_, delete, select, text, update
@@ -60,8 +61,8 @@ class PharmacyService:
             .returning(pharmacies)
         )
 
-        result = await db.execute(pharmacy_query)
-        pharmacy = result.mappings().first()
+        pharmacy_result = await db.execute(pharmacy_query)
+        pharmacy = pharmacy_result.mappings().first()
 
         if not pharmacy:
             raise ValueError("Failed to create pharmacy")
@@ -123,7 +124,7 @@ class PharmacyService:
             self.cache.delete_pattern("pharmacy:list:*")
 
         # Return complete pharmacy data
-        result = await self.get_pharmacy_by_id(db, pharmacy_id)
+        result: dict[Any, Any] | None = await self.get_pharmacy_by_id(db, pharmacy_id)
         if not result:
             raise ValueError("Failed to retrieve created pharmacy")
         return result
@@ -357,9 +358,9 @@ class PharmacyService:
         return pharmacy_list
 
     @staticmethod
-    def _build_pharmacy_update_values(pharmacy_data: PharmacyUpdate) -> dict:
+    def _build_pharmacy_update_values(pharmacy_data: PharmacyUpdate) -> dict[str, Any]:
         """Build update values from pharmacy data, excluding None values."""
-        update_values = {}
+        update_values: dict[str, Any] = {}
         if pharmacy_data.name is not None:
             update_values["name"] = pharmacy_data.name
         if pharmacy_data.description is not None:
@@ -532,7 +533,7 @@ class PharmacyService:
         else:
             # Insert new
             query = (
-                pharmacy_hours.insert()
+                pharmacy_hours.insert()  # type: ignore[assignment]
                 .values(
                     pharmacy_id=pharmacy_id,
                     day_of_week=hours_data.day_of_week,

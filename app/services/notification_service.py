@@ -5,7 +5,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from firebase_admin import messaging
+from firebase_admin import messaging  # type: ignore[import-untyped]
 from sqlalchemy import delete, desc, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -121,7 +121,7 @@ class NotificationService:
             status="pending",
         )
         result = await db.execute(notification_insert)
-        notification_id = result.inserted_primary_key[0]
+        notification_id = result.inserted_primary_key[0]  # type: ignore[attr-defined]
 
         # Get all active tokens for user with their IDs
         query = select(
@@ -310,7 +310,7 @@ class NotificationService:
         await db.commit()
 
         # Fetch created record
-        new_id = result.inserted_primary_key[0]
+        new_id = result.inserted_primary_key[0]  # type: ignore[attr-defined]
         result = await db.execute(select(push_tokens).where(push_tokens.c.id == new_id))
         return dict(result.first()._mapping)
 
@@ -340,7 +340,7 @@ class NotificationService:
             .values(is_active=False)
         )
         await db.commit()
-        return result.rowcount > 0
+        return result.rowcount > 0  # type: ignore[attr-defined]
 
     @staticmethod
     async def deactivate_all_user_tokens(
@@ -361,7 +361,7 @@ class NotificationService:
             update(push_tokens).where(push_tokens.c.user_id == user_id).values(is_active=False)
         )
         await db.commit()
-        return result.rowcount
+        return result.rowcount  # type: ignore[attr-defined]
 
     @staticmethod
     async def send_appointment_created_notification(
@@ -656,7 +656,7 @@ class NotificationService:
             )
         )
         await db.commit()
-        return result.rowcount > 0
+        return result.rowcount > 0  # type: ignore[attr-defined]
 
     @staticmethod
     async def delete_notification(
@@ -686,7 +686,7 @@ class NotificationService:
 
         result = await db.execute(query)
         await db.commit()
-        return result.rowcount > 0
+        return result.rowcount > 0  # type: ignore[attr-defined]
 
     @staticmethod
     async def get_notification_stats(
@@ -721,9 +721,9 @@ class NotificationService:
         all_notifications = result.fetchall()
 
         total = len(all_notifications)
-        by_status = {}
-        by_type = {}
-        by_priority = {}
+        by_status: dict[str, int] = {}
+        by_type: dict[str, int] = {}
+        by_priority: dict[str, int] = {}
 
         for notif in all_notifications:
             status = notif.status

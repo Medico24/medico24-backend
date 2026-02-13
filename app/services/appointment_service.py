@@ -1,6 +1,7 @@
 """Appointment service for business logic."""
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import and_, delete, func, insert, select, update
@@ -207,7 +208,7 @@ class AppointmentService:
         await self.get_appointment(appointment_id, user_id)
 
         # Build update values
-        update_values = {}
+        update_values: dict[str, Any] = {}
         for field, value in data.model_dump(exclude_unset=True).items():
             if value is not None:
                 if isinstance(value, AppointmentStatus):
@@ -322,7 +323,7 @@ class AppointmentService:
             stmt = delete(appointments).where(appointments.c.id == appointment_id)
         else:
             stmt = (
-                update(appointments)
+                update(appointments)  # type: ignore[assignment]
                 .where(appointments.c.id == appointment_id)
                 .values(
                     deleted_at=datetime.utcnow(),

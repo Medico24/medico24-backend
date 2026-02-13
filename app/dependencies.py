@@ -1,6 +1,6 @@
 """FastAPI dependencies."""
 
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
@@ -113,4 +113,4 @@ DatabaseSession = Annotated[AsyncSession, Depends(get_db)]
 CurrentUserId = Annotated[UUID, Depends(get_current_user_id)]
 CurrentUser = Annotated[dict, Depends(get_current_user)]
 CacheManagerDep = Annotated[CacheManager, Depends(get_cache_manager)]
-RedisClient = Annotated[any, Depends(get_redis_client)]
+RedisClient = Annotated[Any, Depends(get_redis_client)]

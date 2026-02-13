@@ -1,6 +1,7 @@
 """User service for business logic."""
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import delete, select, update
@@ -324,12 +325,12 @@ class UserService:
         )
 
         result = await db.execute(query)
-        user = result.mappings().first()
+        user = result.mappings().first()  # type: ignore[assignment]
 
         if not user:
             return None
 
-        user_dict = dict(user)
+        user_dict: dict[Any, Any] = dict(user)
 
         # Database trigger automatically deletes old role record and creates new one
         # For pharmacy staff, update the pharmacy_id

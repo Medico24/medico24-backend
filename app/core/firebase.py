@@ -3,8 +3,8 @@
 import json
 import os
 
-import firebase_admin
-from firebase_admin import auth, credentials
+import firebase_admin  # type: ignore[import-untyped]
+from firebase_admin import auth, credentials  # type: ignore[import-untyped]
 from structlog import get_logger
 
 logger = get_logger(__name__)

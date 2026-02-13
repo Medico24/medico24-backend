@@ -1,5 +1,7 @@
 """Authentication endpoints."""
 
+from typing import Any
+
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +25,7 @@ logger = structlog.get_logger()
 async def firebase_verify(
     request: GoogleAuthRequest,
     db: AsyncSession = Depends(get_db),
-    redis_client: any = Depends(get_redis_client),
+    redis_client: Any = Depends(get_redis_client),
 ) -> LoginResponse:
     """
     Verify Firebase ID token from Flutter app and return JWT tokens.
@@ -93,7 +95,7 @@ async def firebase_verify(
 )
 async def refresh_token(
     request: TokenRefresh,
-    redis_client: any = Depends(get_redis_client),
+    redis_client: Any = Depends(get_redis_client),
 ) -> dict[str, str]:
     """
     Refresh access token using refresh token.
@@ -134,7 +136,7 @@ async def refresh_token(
 )
 async def logout(
     request: TokenRefresh,
-    redis_client: any = Depends(get_redis_client),
+    redis_client: Any = Depends(get_redis_client),
 ) -> None:
     """
     Logout user by revoking refresh token.
