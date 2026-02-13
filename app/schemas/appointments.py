@@ -1,13 +1,14 @@
 """Appointment schemas for request/response validation."""
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
+from pydantic_core.core_schema import ValidationInfo
 
 
-class AppointmentStatus(str, Enum):
+class AppointmentStatus(StrEnum):
     """Appointment status enumeration."""
 
     SCHEDULED = "scheduled"
@@ -18,7 +19,7 @@ class AppointmentStatus(str, Enum):
     NO_SHOW = "no_show"
 
 
-class AppointmentSource(str, Enum):
+class AppointmentSource(StrEnum):
     """Appointment source enumeration."""
 
     PATIENT_APP = "patient_app"
@@ -54,7 +55,7 @@ class AppointmentBase(BaseModel):
 
     @field_validator("appointment_end_at")
     @classmethod
-    def validate_end_time(cls, v: datetime | None, info: any) -> datetime | None:
+    def validate_end_time(cls, v: datetime | None, info: ValidationInfo) -> datetime | None:
         """Validate end time is after start time."""
         if v and "appointment_at" in info.data:
             if v <= info.data["appointment_at"]:
