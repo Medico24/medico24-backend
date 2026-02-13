@@ -9,6 +9,10 @@ on:
 env:
   PYTHON_VERSION: "3.14"
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   # Code quality checks
   quality:
@@ -116,7 +120,7 @@ jobs:
           output: "trivy-results.sarif"
 
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: "trivy-results.sarif"
 
