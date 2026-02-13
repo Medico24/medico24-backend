@@ -83,17 +83,11 @@ jobs:
       - name: Install dependencies
         run: uv pip install --system -e ".[dev]"
 
+      - name: Setup environment file
+        run: |
+          cp .env.example .env
+
       - name: Run tests with coverage
-        env:
-          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
-          REDIS_HOST: localhost
-          REDIS_PORT: 6379
-          REDIS_USERNAME: default
-          REDIS_PASSWORD: ""
-          JWT_SECRET_KEY: test-secret-key-min-32-characters-long
-          GOOGLE_CLIENT_ID: test-client-id
-          GOOGLE_CLIENT_SECRET: test-client-secret
-          GOOGLE_REDIRECT_URI: http://localhost:8000/callback
         run: pytest
 
       - name: Upload coverage reports
