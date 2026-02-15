@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis_client import CacheManager
 from app.models.admins import admins
-from app.models.doctors import doctors
 from app.models.patients import patients
 from app.models.pharmacy_staff import pharmacy_staff
 from app.models.users import users
@@ -45,8 +44,7 @@ class UserService:
             Role-specific records are automatically created by database triggers.
             For pharmacy users, we update the pharmacy_id after creation.
         """
-        # Determine role (default to 'patient' if not specified)
-        role = user_data.role if hasattr(user_data, "role") and user_data.role else "patient"
+        role = "pharmacy" if pharmacy_id else "patient"
 
         # Validate pharmacy_id for pharmacy role
         if role == "pharmacy" and not pharmacy_id:
@@ -356,13 +354,6 @@ class UserService:
         result = await db.execute(query)
         patient = result.mappings().first()
         return dict(patient) if patient else None
-
-    async def get_doctor_profile(self, db: AsyncSession, user_id: UUID) -> dict | None:
-        """Get doctor-specific profile data."""
-        query = select(doctors).where(doctors.c.user_id == user_id)
-        result = await db.execute(query)
-        doctor = result.mappings().first()
-        return dict(doctor) if doctor else None
 
     async def get_pharmacy_staff_profile(self, db: AsyncSession, user_id: UUID) -> dict | None:
         """Get pharmacy staff-specific profile data."""

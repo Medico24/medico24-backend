@@ -11,7 +11,6 @@ from app.core.redis_client import CacheManager
 from app.models.clinics import clinics
 from app.models.doctor_clinics import doctor_clinics
 from app.models.doctors import doctors
-from app.models.users import users
 from app.schemas.doctors import DoctorCreate, DoctorUpdate
 
 
@@ -36,7 +35,10 @@ class DoctorService:
         query = (
             doctors.insert()
             .values(
-                user_id=doctor_data.user_id,
+                email=doctor_data.email,
+                full_name=doctor_data.full_name,
+                phone=doctor_data.phone,
+                profile_picture_url=doctor_data.profile_picture_url,
                 license_number=doctor_data.license_number,
                 specialization=doctor_data.specialization,
                 sub_specialization=doctor_data.sub_specialization,
@@ -92,22 +94,11 @@ class DoctorService:
         return doctor_dict
 
     async def get_doctor_with_details(self, db: AsyncSession, doctor_id: UUID) -> dict | None:
-        """Get doctor with user details and clinic associations."""
+        """Get doctor with clinic associations."""
         # Get doctor
         doctor = await self.get_doctor_by_id(db, doctor_id)
         if not doctor:
             return None
-
-        # Get user details
-        user_query = select(users).where(users.c.id == doctor["user_id"])
-        user_result = await db.execute(user_query)
-        user = user_result.mappings().first()
-
-        if user:
-            doctor["full_name"] = user["full_name"]
-            doctor["email"] = user["email"]
-            doctor["phone_number"] = user["phone_number"]
-            doctor["profile_picture_url"] = user["profile_picture_url"]
 
         # Get clinic associations
         clinics_query = (
@@ -131,14 +122,6 @@ class DoctorService:
         doctor["clinics"] = [dict(row) for row in clinics_result.mappings().all()]
 
         return doctor
-
-    async def get_doctor_by_user_id(self, db: AsyncSession, user_id: UUID) -> dict | None:
-        """Get doctor by user ID."""
-        query = select(doctors).where(doctors.c.user_id == user_id)
-        result = await db.execute(query)
-        doctor = result.mappings().first()
-
-        return dict(doctor) if doctor else None
 
     async def get_doctors(
         self,
@@ -180,14 +163,9 @@ class DoctorService:
             for lang in languages:
                 conditions.append(doctors.c.languages_spoken.contains([lang]))
 
-        # Join with users to get full name
+        # Query doctors
         query = (
-            select(
-                doctors,
-                users.c.full_name,
-                users.c.profile_picture_url,
-            )
-            .join(users, doctors.c.user_id == users.c.id)
+            select(doctors)
             .where(and_(*conditions) if conditions else text("1=1"))  # type: ignore[arg-type]
             .order_by(doctors.c.rating.desc().nullslast(), doctors.c.experience_years.desc())
             .offset(skip)
@@ -244,8 +222,6 @@ class DoctorService:
         query = (
             select(
                 doctors,
-                users.c.full_name,
-                users.c.profile_picture_url,
                 clinics.c.name.label("clinic_name"),
                 clinics.c.address.label("clinic_address"),
                 doctor_clinics.c.consultation_fee.label("clinic_consultation_fee"),
@@ -253,7 +229,6 @@ class DoctorService:
             )
             .join(doctor_clinics, doctors.c.id == doctor_clinics.c.doctor_id)
             .join(clinics, doctor_clinics.c.clinic_id == clinics.c.id)
-            .join(users, doctors.c.user_id == users.c.id)
             .where(and_(*conditions))
             .having(distance_formula <= radius_km)
             .order_by(distance_formula, doctors.c.rating.desc().nullslast())

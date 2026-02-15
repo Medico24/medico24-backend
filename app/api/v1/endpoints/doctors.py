@@ -63,10 +63,10 @@ async def create_doctor(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Doctor with license number '{doctor_data.license_number}' already exists",
             ) from e
-        if "doctors_user_id_key" in error_msg:
+        if "doctors_email_key" in error_msg:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User already has a doctor profile",
+                detail=f"Doctor with email '{doctor_data.email}' already exists",
             ) from e
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to create doctor"
@@ -209,28 +209,6 @@ async def get_doctor(
 
     if not doctor:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found")
-
-    return doctor
-
-
-@router.get("/user/{user_id}", response_model=DoctorResponse)
-async def get_doctor_by_user_id(
-    user_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    doctor_service: DoctorService = Depends(get_doctor_service),
-):
-    """
-    Get doctor profile by user ID.
-
-    Useful for retrieving a doctor's profile when you have their user account ID.
-    """
-    doctor = await doctor_service.get_doctor_by_user_id(db, user_id)
-
-    if not doctor:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No doctor profile found for this user",
-        )
 
     return doctor
 

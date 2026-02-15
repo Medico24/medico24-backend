@@ -11,7 +11,6 @@ from app.core.redis_client import CacheManager
 from app.models.clinics import clinics
 from app.models.doctor_clinics import doctor_clinics
 from app.models.doctors import doctors
-from app.models.users import users
 from app.schemas.clinics import ClinicCreate, ClinicUpdate
 from app.schemas.doctor_clinics import DoctorClinicCreate, DoctorClinicUpdate
 
@@ -329,12 +328,11 @@ class ClinicService:
                 doctors.c.license_number,
                 doctors.c.specialization,
                 doctors.c.experience_years,
-                users.c.full_name.label("doctor_name"),
+                doctors.c.full_name.label("doctor_name"),
             )
             .join(doctors, doctor_clinics.c.doctor_id == doctors.c.id)
-            .join(users, doctors.c.user_id == users.c.id)
             .where(and_(*conditions))
-            .order_by(doctor_clinics.c.is_primary.desc(), users.c.full_name)
+            .order_by(doctor_clinics.c.is_primary.desc(), doctors.c.full_name)
         )
 
         result = await db.execute(query)

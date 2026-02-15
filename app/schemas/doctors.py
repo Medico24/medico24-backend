@@ -14,6 +14,10 @@ from pydantic import BaseModel, Field, field_serializer
 class DoctorBase(BaseModel):
     """Base schema for doctor."""
 
+    email: str
+    full_name: str
+    phone: str | None = None
+    profile_picture_url: str | None = None
     license_number: str = Field(..., min_length=1, max_length=100)
     specialization: str = Field(..., min_length=1, max_length=200)
     sub_specialization: str | None = Field(None, max_length=200)
@@ -28,8 +32,6 @@ class DoctorBase(BaseModel):
 
 class DoctorCreate(DoctorBase):
     """Schema for creating a doctor."""
-
-    user_id: UUID
 
 
 class DoctorUpdate(BaseModel):
@@ -50,7 +52,6 @@ class DoctorResponse(DoctorBase):
     """Doctor response schema."""
 
     id: UUID
-    user_id: UUID
     is_verified: bool
     verification_documents: dict | None = None
     verified_at: datetime | None = None
@@ -73,7 +74,10 @@ class DoctorListResponse(BaseModel):
     """Doctor schema for list responses."""
 
     id: UUID
-    user_id: UUID
+    email: str
+    full_name: str
+    phone: str | None
+    profile_picture_url: str | None
     license_number: str
     specialization: str
     sub_specialization: str | None
@@ -82,9 +86,6 @@ class DoctorListResponse(BaseModel):
     is_verified: bool
     rating: Decimal | None
     rating_count: int
-    # From user join
-    full_name: str | None = None
-    profile_picture_url: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -97,11 +98,6 @@ class DoctorListResponse(BaseModel):
 class DoctorDetailResponse(DoctorResponse):
     """Detailed doctor response with user info and clinics."""
 
-    # User information
-    full_name: str
-    email: str | None = None
-    phone_number: str
-    profile_picture_url: str | None = None
     # Clinic associations
     clinics: list[dict] = Field(default_factory=list)
 

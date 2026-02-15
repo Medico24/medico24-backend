@@ -94,13 +94,11 @@ def upgrade() -> None:
             primary_key=True,
             server_default=sa.text("gen_random_uuid()"),
         ),
-        sa.Column(
-            "user_id",
-            postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("users.id", ondelete="CASCADE"),
-            nullable=False,
-            unique=True,
-        ),
+        # Personal information
+        sa.Column("email", sa.Text(), nullable=False, unique=True),
+        sa.Column("full_name", sa.Text(), nullable=False),
+        sa.Column("phone", sa.String(20), nullable=True),
+        sa.Column("profile_picture_url", sa.Text(), nullable=True),
         # Professional credentials
         sa.Column("license_number", sa.String(100), nullable=True, unique=True),
         sa.Column("specialization", sa.String(200), nullable=True),
@@ -144,7 +142,7 @@ def upgrade() -> None:
         ),
     )
 
-    op.create_index("ix_doctors_user_id", "doctors", ["user_id"], unique=True)
+    op.create_index("ix_doctors_email", "doctors", ["email"], unique=True)
     op.create_index("ix_doctors_license_number", "doctors", ["license_number"], unique=True)
     op.create_index("ix_doctors_specialization", "doctors", ["specialization"])
     op.create_index("ix_doctors_is_verified", "doctors", ["is_verified"])
@@ -268,14 +266,8 @@ def upgrade() -> None:
     """
     )
 
-    # Migrate doctors
-    op.execute(
-        """
-        INSERT INTO doctors (user_id)
-        SELECT id FROM users WHERE role = 'doctor'
-        ON CONFLICT (user_id) DO NOTHING
-    """
-    )
+    # Note: Doctors are now independent from users table (no user_id)
+    # Doctor records should be created separately through the API
 
     # Migrate admins
     op.execute(
@@ -314,7 +306,7 @@ def downgrade() -> None:
     op.drop_index("ix_doctors_is_verified", table_name="doctors")
     op.drop_index("ix_doctors_specialization", table_name="doctors")
     op.drop_index("ix_doctors_license_number", table_name="doctors")
-    op.drop_index("ix_doctors_user_id", table_name="doctors")
+    op.drop_index("ix_doctors_email", table_name="doctors")
     op.drop_table("doctors")
 
     op.drop_index("ix_patients_user_id", table_name="patients")

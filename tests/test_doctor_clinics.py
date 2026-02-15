@@ -1,7 +1,6 @@
 """Tests for doctor_clinics junction table operations."""
 
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
 
 import pytest
 from sqlalchemy import and_, delete, insert, select, update
@@ -9,29 +8,16 @@ from sqlalchemy import and_, delete, insert, select, update
 from app.models.clinics import clinics
 from app.models.doctor_clinics import doctor_clinics
 from app.models.doctors import doctors
-from app.models.users import users
 
 
 @pytest.fixture
 async def test_doctor(db_session):
     """Create a test doctor."""
-    # Create user first
-    user_id = uuid4()
-    user_data = {
-        "id": user_id,
-        "firebase_uid": f"test_doctor_{user_id}",
-        "email": "doctor@test.com",
-        "email_verified": True,
-        "auth_provider": "google",
-        "full_name": "Dr. Test Doctor",
-        "role": "doctor",
-        "is_active": True,
-    }
-    await db_session.execute(insert(users).values(**user_data))
-
-    # Create doctor
+    # Create doctor directly (no user needed)
     doctor_data = {
-        "user_id": user_id,
+        "email": "doctor@test.com",
+        "full_name": "Dr. Test Doctor",
+        "phone": "+919876543210",
         "license_number": "DOC123456",
         "specialization": "Cardiology",
         "consultation_fee": 1000.00,
@@ -168,34 +154,26 @@ async def test_multiple_clinics_for_doctor(db_session, test_doctor):
 async def test_multiple_doctors_at_clinic(db_session, test_clinic):
     """Test that a clinic can have multiple doctors."""
     # Create two doctors
-    doctor1_user_id = uuid4()
-    await db_session.execute(
-        insert(users).values(
-            id=doctor1_user_id,
-            firebase_uid=f"doctor1_{doctor1_user_id}",
-            email="doctor1@test.com",
-            role="doctor",
-        )
-    )
     doctor1_result = await db_session.execute(
         insert(doctors)
-        .values(user_id=doctor1_user_id, license_number="DOC001", specialization="Cardiology")
+        .values(
+            email="doctor1@test.com",
+            full_name="Dr. Cardiologist",
+            license_number="DOC001",
+            specialization="Cardiology",
+        )
         .returning(doctors.c.id)
     )
     doctor1_id = doctor1_result.scalar_one()
 
-    doctor2_user_id = uuid4()
-    await db_session.execute(
-        insert(users).values(
-            id=doctor2_user_id,
-            firebase_uid=f"doctor2_{doctor2_user_id}",
-            email="doctor2@test.com",
-            role="doctor",
-        )
-    )
     doctor2_result = await db_session.execute(
         insert(doctors)
-        .values(user_id=doctor2_user_id, license_number="DOC002", specialization="Neurology")
+        .values(
+            email="doctor2@test.com",
+            full_name="Dr. Neurologist",
+            license_number="DOC002",
+            specialization="Neurology",
+        )
         .returning(doctors.c.id)
     )
     doctor2_id = doctor2_result.scalar_one()

@@ -5,7 +5,6 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
-    ForeignKey,
     Integer,
     MetaData,
     Numeric,
@@ -22,14 +21,11 @@ doctors = Table(
     "doctors",
     metadata,
     Column("id", UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")),
-    Column(
-        "user_id",
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-        unique=True,
-        index=True,
-    ),
+    # Personal information
+    Column("email", Text, nullable=False, unique=True, index=True),
+    Column("full_name", Text, nullable=False),
+    Column("phone", String(20)),
+    Column("profile_picture_url", Text),
     # Professional credentials
     Column("license_number", String(100), unique=True, index=True),
     Column("specialization", String(200), index=True),

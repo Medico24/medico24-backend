@@ -11,38 +11,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.clinics import clinics
 from app.models.doctor_clinics import doctor_clinics
 from app.models.doctors import doctors
-from app.models.users import users
+
+# Note: test_user fixture removed - doctors are now independent from users
 
 
 @pytest.fixture
-async def test_user(db: AsyncSession):
-    """Create a test user."""
-    user_id = uuid4()
-    await db.execute(
-        insert(users).values(
-            id=user_id,
-            email=f"doctor.{user_id}@test.com",
-            phone_number="+1234567890",
-            password_hash="hashed_password",  # pragma: allowlist secret
-            role="doctor",
-            full_name="Dr. Test Doctor",
-            email_verified=True,
-        )
-    )
-    await db.commit()
-    yield user_id
-    await db.execute(delete(users).where(users.c.id == user_id))
-    await db.commit()
-
-
-@pytest.fixture
-async def test_doctor(db: AsyncSession, test_user):
+async def test_doctor(db: AsyncSession):
     """Create a test doctor."""
     doctor_id = uuid4()
     await db.execute(
         insert(doctors).values(
             id=doctor_id,
-            user_id=test_user,
+            email=f"doctor.{doctor_id}@test.com",
+            full_name="Dr. Test Doctor",
+            phone="+1234567890",
+            profile_picture_url="https://example.com/photo.jpg",
             license_number=f"LIC-{uuid4()}",
             specialization="Cardiology",
             sub_specialization="Interventional Cardiology",
@@ -93,10 +76,13 @@ async def test_clinic(db: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_create_doctor_success(client: AsyncClient, test_user, db: AsyncSession):
+async def test_create_doctor_success(client: AsyncClient, db: AsyncSession):
     """Test successful doctor creation."""
+    test_email = f"neuro.{uuid4()}@test.com"
     doctor_data = {
-        "user_id": str(test_user),
+        "email": test_email,
+        "full_name": "Dr. Neuro Specialist",
+        "phone": "+1987654321",
         "license_number": f"LIC-{uuid4()}",
         "specialization": "Neurology",
         "sub_specialization": "Pediatric Neurology",
@@ -115,7 +101,8 @@ async def test_create_doctor_success(client: AsyncClient, test_user, db: AsyncSe
     data = response.json()
     assert data["license_number"] == doctor_data["license_number"]
     assert data["specialization"] == doctor_data["specialization"]
-    assert data["user_id"] == doctor_data["user_id"]
+    assert data["email"] == doctor_data["email"]
+    assert data["full_name"] == doctor_data["full_name"]
     assert data["is_verified"] is False  # New doctors should not be verified
 
     # Cleanup
@@ -124,16 +111,16 @@ async def test_create_doctor_success(client: AsyncClient, test_user, db: AsyncSe
 
 
 @pytest.mark.asyncio
-async def test_create_doctor_duplicate_license(client: AsyncClient, test_doctor, test_user):
+async def test_create_doctor_duplicate_license(client: AsyncClient, test_doctor):
     """Test creating doctor with duplicate license number."""
     # Get existing doctor's license number
     response = await client.get(f"/api/v1/doctors/{test_doctor}")
     existing_license = response.json()["license_number"]
 
     # Try to create another doctor with same license
-    new_user_id = uuid4()
     doctor_data = {
-        "user_id": str(new_user_id),
+        "email": f"duplicate.{uuid4()}@test.com",
+        "full_name": "Dr. Duplicate",
         "license_number": existing_license,
         "specialization": "Orthopedics",
     }
@@ -172,15 +159,7 @@ async def test_get_doctor_not_found(client: AsyncClient):
     assert "not found" in response.json()["detail"].lower()
 
 
-@pytest.mark.asyncio
-async def test_get_doctor_by_user_id(client: AsyncClient, test_user, test_doctor):
-    """Test getting doctor by user ID."""
-    response = await client.get(f"/api/v1/doctors/user/{test_user}")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["user_id"] == str(test_user)
-    assert data["id"] == str(test_doctor)
+# test_get_doctor_by_user_id removed - doctors are now independent from users
 
 
 # ============================================================================
